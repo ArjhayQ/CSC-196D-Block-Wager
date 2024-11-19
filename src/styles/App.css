@@ -1,0 +1,37 @@
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  /* background-color: #171717; */
+  /* max-width: 80%;
+  margin: 0 auto; */
+}
+
+.navbar-container {
+  flex-shrink: 0;
+}
+
+.main-content {
+  display: flex;
+  flex: 1;
+  max-width: 80%;
+  width: 100%;
+  /* margin: 0 auto; */
+  margin: auto;
+}
+
+.chat-section {
+  width: 15%;
+  padding: 10px;
+  overflow-y: auto;
+}
+
+.dynamic-content {
+  width: 85%;
+  margin: 0 auto;
+  /* width: 100%; */
+  padding: 30px;
+  /* padding: 10px; */
+  overflow-y: auto;
+  /* background-color: #1f1f1f; */
+}

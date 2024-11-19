@@ -1,0 +1,78 @@
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 20px;
+  color: white;
+  background-color: #171719;
+}
+
+.logo-main-link {
+  text-decoration: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  cursor: pointer;
+}
+
+.logo-main {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: white;
+  font-family: 'Satoshi', sans-serif;
+}
+
+.logo-sub {
+  font-size: 0.9rem;
+  color: grey;
+  font-family: 'Satoshi', sans-serif;
+  font-weight: lighter;
+}
+
+.navbar-logo a {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: white;
+  text-decoration: none;
+}
+
+.navbar-links {
+  display: flex;
+  gap: 20px;
+  font-family: 'Satoshi', sans-serif;
+  font-weight: bold;
+}
+
+.navbar-link {
+  /* color: grey; */
+  color: #E6E6E6;
+  opacity: 50%;
+  text-decoration: none;
+  font-size: 1rem;
+  transition: color 0.3s ease, opacity 0.3s ease;
+}
+
+.navbar-link:hover {
+  color: white;
+  opacity: 100%;
+}
+
+.navbar-auth .auth-button {
+  /* background-color: #33BBC7; */
+  font-size: 1rem;
+  background-color: transparent;
+  color: grey;
+  border: none;
+  padding: 5px 10px;
+  cursor: pointer;
+  border-radius: 5px;
+  margin-right: 5px;
+  transition: background-color 0.3s ease, color 0.3s ease;
+  font-family: 'Satoshi', sans-serif;
+}
+
+.navbar-auth .auth-button:hover {
+  background-color: #33BBC7;
+  color: white;
+}
+  
