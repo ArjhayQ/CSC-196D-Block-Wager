@@ -1,11 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.12 < 0.9.0;
 
-// blackjack.sol
-// Jay Ofemi
-// BlackJack smart contract
-// Created: 06/23/2018
-// Revised: 12/17/2022
+pragma solidity >=0.8.12 <0.9.0;
+
+// BlackJack.sol
 
 //////////////////////////////////
 // RULES:
@@ -27,7 +24,7 @@ import "@openzeppelin/contracts/utils/Strings.sol";
  * @title BlackJack
  * @dev Smart contract game of Blackjack that can be deployed on the blockchain.
  */
-
+ 
 contract BlackJack {
     using SafeMath for uint256;
 
@@ -749,4 +746,5 @@ contract BlackJack {
         PlayerBet = string.concat(" --> ", Strings.toString(game.PlayerBet), " wei");
         Pot = string.concat(" --> ", Strings.toString(game.SafeBalance), " wei");
     }
-} 
+
+}
