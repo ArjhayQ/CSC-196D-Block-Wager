@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity >=0.8.12 <0.9.0;
+pragma solidity >=0.8.20 <0.9.0;
 
 // BlackJack.sol
 
@@ -16,7 +16,7 @@ pragma solidity >=0.8.12 <0.9.0;
 // * No surrender.
 ///////////////////////////////////
 
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+//import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
 
@@ -26,7 +26,7 @@ import "@openzeppelin/contracts/utils/Strings.sol";
  */
  
 contract BlackJack {
-    using SafeMath for uint256;
+    //using SafeMath for uint256;
 
     struct Game {
 
@@ -705,7 +705,7 @@ contract BlackJack {
      */
     function GenerateRandomNumber() private returns (uint256 randomNumber) {
         _rngCounter *= 21;
-        uint256 seed = (block.timestamp + block.difficulty + _rngCounter) % 100;
+        uint256 seed = (block.timestamp + block.prevrandao + _rngCounter) % 100;
         randomNumber = (uint256(keccak256(abi.encodePacked(blockhash(block.number - 1), seed))) % 13 + 1);
 
         _rngCounter++;
