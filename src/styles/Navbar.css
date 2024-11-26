@@ -1,6 +1,7 @@
 .navbar {
   display: flex;
-  justify-content: space-between;
+  /*justify-content: space-between;*/
+  justify-content: flex-start;
   align-items: center;
   padding: 10px 20px;
   color: white;
@@ -13,6 +14,7 @@
   flex-direction: column;
   align-items: flex-start;
   cursor: pointer;
+  margin-right: 50px;
 }
 
 .logo-main {
@@ -27,13 +29,6 @@
   color: grey;
   font-family: 'Satoshi', sans-serif;
   font-weight: lighter;
-}
-
-.navbar-logo a {
-  font-size: 1.5rem;
-  font-weight: bold;
-  color: white;
-  text-decoration: none;
 }
 
 .navbar-links {
@@ -57,22 +52,7 @@
   opacity: 100%;
 }
 
-.navbar-auth .auth-button {
-  /* background-color: #33BBC7; */
-  font-size: 1rem;
-  background-color: transparent;
-  color: grey;
-  border: none;
-  padding: 5px 10px;
-  cursor: pointer;
-  border-radius: 5px;
-  margin-right: 5px;
-  transition: background-color 0.3s ease, color 0.3s ease;
-  font-family: 'Satoshi', sans-serif;
-}
-
-.navbar-auth .auth-button:hover {
-  background-color: #33BBC7;
+.active-link {
   color: white;
+  opacity: 100%;
 }
-  
