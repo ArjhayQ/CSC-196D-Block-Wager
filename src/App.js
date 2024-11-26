@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ethers } from 'ethers';
 import Navbar from './components/Navbar';
 import Home from './pages/Home';
-import Dice from './pages/Dice';
+import CoinFlip from './pages/CoinFlip';
 import Blackjack from './pages/Blackjack';
 import './styles/App.css';
 
@@ -45,17 +45,8 @@ const App = () => {
         <div className="dynamic-content">
           <Routes>
             <Route path="/" element={<Home />} />
-            <Route path="/dice" element={<Dice />} />
-            <Route
-              path="/blackjack"
-              element={
-                <Blackjack
-                  provider={provider}
-                  signer={signer}
-                  blackjackContract={blackjackContract}
-                />
-              }
-            />
+            <Route path="/CoinFlip" element={<CoinFlip />} />
+            <Route path="/blackjack" element={<Blackjack />} />
           </Routes>
         </div>
       </div>
