@@ -1,0 +1,43 @@
+.card {
+    width: 100px;
+    height: 140px;
+    background-color: white;
+    border-radius: 8px;
+    border: 2px solid rgba(0, 0, 0, 0.2);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    margin: 0 5px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+  }
+  
+  .card.red {
+    color: #e53e3e;
+  }
+  
+  .card.black {
+    color: #2d3748;
+  }
+  
+  .hidden-card {
+    background: repeating-linear-gradient(
+      45deg,
+      #2d3748,
+      #2d3748 10px,
+      #4a5568 10px,
+      #4a5568 20px
+    );
+    color: transparent;
+  }
+  
+  .card-value {
+    font-size: 24px;
+    font-weight: bold;
+  }
+  
+  .card-suit {
+    font-size: 32px;
+    text-align: center;
+  }

@@ -1,0 +1,8 @@
+/* src/styles/Hand.css */
+
+.hand {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+  

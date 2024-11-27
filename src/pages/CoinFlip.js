@@ -11,7 +11,7 @@ const CoinFlipPage = () => {
   const [showModal, setShowModal] = useState(false);
   const [newLobby, setNewLobby] = useState({ betAmount: "", choice: "" });
 
-  const contractAddress = "0xD2888Aef88Ff1480aEA8A1A6F6E3b029b791e5D4";
+  const contractAddress = "0x6ae492096459728a65403B4E48E59EB9b6385411";
 
   useEffect(() => {
     const initWeb3 = async () => {
