@@ -88,7 +88,7 @@ contract Blackjack {
     event HandBusted(uint256 indexed gameId, bool isSplitHand);
     event DealerAction(uint256 indexed gameId, string action);
     event DealerTurnComplete(uint256 indexed gameId, uint8 dealerScore);
-    event GameComplete(uint256 indexed gameId, string result, uint256 payout, uint8 playerScore, uint8 dealerScore);
+    event GameComplete(uint256 indexed gameId, string result, uint256 playerPayout, uint256 dealerPayout, uint8 playerScore, uint8 dealerScore);
     event PlayerTurn(uint256 indexed gameId);
     event DealerTurn(uint256 indexed gameId);
 
@@ -517,7 +517,7 @@ contract Blackjack {
             payable(game.dealer).transfer(payoutToDealer);
         }
 
-        _finalizeGameState(gameId, game, result, payoutToPlayer);
+        _finalizeGameState(gameId, game, result, payoutToPlayer, payoutToDealer);
 
         // Update lobby status
         for (uint256 i = 0; i < lobbyCounter; i++) {
@@ -541,7 +541,7 @@ contract Blackjack {
         }
 
         if (playerPayout > 0) {
-            result = "Player Wins";
+            //result = "Player Wins";
             payoutToPlayer = playerPayout;
             payoutToDealer = 0;
         } else if (playerPayout == 0 && !game.playerBusted && !game.dealerBusted && game.scores.playerScore == game.scores.dealerScore) {
@@ -619,10 +619,11 @@ contract Blackjack {
         uint256 gameId,
         Game storage game,
         string memory result,
-        uint256 payoutToPlayer
+        uint256 payoutToPlayer,
+        uint256 payoutToDealer
     ) internal {
         game.state = GameState.Complete;
-        emit GameComplete(gameId, result, payoutToPlayer, game.scores.playerScore, game.scores.dealerScore);
+        emit GameComplete(gameId, result, payoutToPlayer, payoutToDealer, game.scores.playerScore, game.scores.dealerScore);
     }
 
     // ------------------ Helper Functions ------------------
