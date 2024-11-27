@@ -81,7 +81,7 @@ contract Blackjack {
     event LobbyJoined(uint256 indexed lobbyId, address indexed player);
     event LobbyCancelled(uint256 indexed lobbyId, address indexed host, uint256 refundAmount);
     event LobbyTimeout(uint256 indexed lobbyId);
-    event GameCreated(uint256 indexed gameId, address indexed player, uint256 betAmount);
+    event GameCreated(uint256 indexed gameId, address indexed player, address indexed dealer, uint256 betAmount);
     event CardDealt(uint256 indexed gameId, address indexed recipient, uint8 value, uint8 suit, bool isDealer);
     event PlayerAction(uint256 indexed gameId, string action);
     event SplitHandStarted(uint256 indexed gameId);
@@ -215,7 +215,7 @@ contract Blackjack {
             newGame.usedCards[i] = false;
         }
 
-        emit GameCreated(currentGameId, player, lobby.betAmount);
+        emit GameCreated(currentGameId, player, lobby.host, lobby.betAmount);
 
         // Deal initial cards
         _dealInitialCards(currentGameId);
@@ -440,39 +440,41 @@ contract Blackjack {
         game.scores.playerScore = CardLib.calculateHandValue(game.playerHand);
     }
 
-    // Dealer's turn implementation
-    function _dealerTurn(uint256 gameId) internal {
+    // Modified dealer turn to be manual instead of automatic
+    function dealerHit(uint256 gameId) external {
         Game storage game = games[gameId];
+        require(msg.sender == game.dealer, "Only dealer can perform this action");
         require(game.state == GameState.DealerTurn, "Not dealer's turn");
+        require(!game.dealerBusted, "Dealer already busted");
 
-        _executeDealerActions(game, gameId);
-        _checkDealerBust(game, gameId);
-        _finishDealerTurn(game, gameId);
-    }
-
-    // Internal function to execute dealer actions
-    function _executeDealerActions(Game storage game, uint256 gameId) internal {
+        _dealCard(gameId, true);
         game.scores.dealerScore = CardLib.calculateHandValue(game.dealerHand);
 
-        while (_shouldDealerHit(game.dealerHand, game.scores.dealerScore)) {
-            _dealCard(gameId, true);
-            game.scores.dealerScore = CardLib.calculateHandValue(game.dealerHand);
-            emit DealerAction(gameId, "Hit");
-        }
-    }
-
-    // Internal function to check if dealer busted
-    function _checkDealerBust(Game storage game, uint256 gameId) internal {
         if (game.scores.dealerScore > BLACKJACK) {
             game.dealerBusted = true;
             emit DealerAction(gameId, "Bust");
+            _endGame(gameId);
         }
+
+        game.lastActionTime = block.timestamp;
+        emit DealerAction(gameId, "Hit");
     }
 
-    // Internal function to finish dealer's turn
-    function _finishDealerTurn(Game storage game, uint256 gameId) internal {
+    function dealerStand(uint256 gameId) external {
+        Game storage game = games[gameId];
+        require(msg.sender == game.dealer, "Only dealer can perform this action");
+        require(game.state == GameState.DealerTurn, "Not dealer's turn");
+
+        emit DealerAction(gameId, "Stand");
         emit DealerTurnComplete(gameId, game.scores.dealerScore);
         _endGame(gameId);
+    }
+
+    // Remove the automatic _dealerTurn implementation
+    function _dealerTurn(uint256 gameId) internal {
+        Game storage game = games[gameId];
+        require(game.state == GameState.DealerTurn, "Not dealer's turn");
+        emit DealerTurn(gameId);
     }
 
     // Internal function to determine if dealer should hit

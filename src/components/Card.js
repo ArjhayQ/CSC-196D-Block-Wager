@@ -1,45 +1,54 @@
-// src/components/Card.js
+import React from "react";
+import "../styles/Card.css";
 
-import React from 'react';
-import '../styles/Card.css';
+const Card = React.forwardRef(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={`rounded-lg border bg-card text-card-foreground shadow-sm ${className}`}
+    {...props}
+  />
+));
+Card.displayName = "Card";
 
-const Card = React.memo(({ value, suit, hidden }) => {
-  //console.log(`Rendering Card: value=${value}, suit=${suit}, hidden=${hidden}`);
+const CardHeader = React.forwardRef(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={`flex flex-col space-y-1.5 p-6 ${className}`}
+    {...props}
+  />
+));
+CardHeader.displayName = "CardHeader";
 
-  if (hidden) {
-    return <div className="card hidden-card">?</div>;
-  }
+const CardTitle = React.forwardRef(({ className, ...props }, ref) => (
+  <h3
+    ref={ref}
+    className={`text-2xl font-semibold leading-none tracking-tight ${className}`}
+    {...props}
+  />
+));
+CardTitle.displayName = "CardTitle";
 
-  const getSuitSymbol = (suit) => {
-    switch (suit) {
-      case 1: return '♥';
-      case 2: return '♦';
-      case 3: return '♣';
-      case 4: return '♠';
-      default: return '';
-    }
-  };
+const CardDescription = React.forwardRef(({ className, ...props }, ref) => (
+  <p
+    ref={ref}
+    className={`text-sm text-muted-foreground ${className}`}
+    {...props}
+  />
+));
+CardDescription.displayName = "CardDescription";
 
-  const getCardValue = (value) => {
-    switch (value) {
-      case 1: return 'A';
-      case 11: return 'J';
-      case 12: return 'Q';
-      case 13: return 'K';
-      default: return value.toString();
-    }
-  };
+const CardContent = React.forwardRef(({ className, ...props }, ref) => (
+  <div ref={ref} className={`p-6 pt-0 ${className}`} {...props} />
+));
+CardContent.displayName = "CardContent";
 
-  const isRed = suit === 1 || suit === 2;
-  const suitSymbol = getSuitSymbol(suit);
-  const displayValue = getCardValue(value);
+const CardFooter = React.forwardRef(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={`flex items-center p-6 pt-0 ${className}`}
+    {...props}
+  />
+));
+CardFooter.displayName = "CardFooter";
 
-  return (
-    <div className={`card ${isRed ? 'red' : 'black'}`}>
-      <div className="card-value">{displayValue}</div>
-      <div className="card-suit">{suitSymbol}</div>
-    </div>
-  );
-});
-
-export default Card;
+export { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter };

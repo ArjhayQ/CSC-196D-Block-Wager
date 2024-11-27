@@ -1,6 +1,6 @@
 // src/Blackjack.js
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import Web3 from "web3";
 import BlackjackABI from "../abis/Blackjack.json";
 import "../styles/Blackjack.css";
@@ -24,8 +24,12 @@ const BlackjackPage = () => {
   const [splitCards, setSplitCards] = useState([]);
   const [playerAddress, setPlayerAddress] = useState(null);
   const [dealerAddress, setDealerAddress] = useState(null);
-  
-  const contractAddress = "0xE81c7131C75b57aaFe1b4d1c8C5296B22bA8e06b";
+  const [gameResult, setGameResult] = useState(null);
+  const [gameComplete, setGameComplete] = useState(false); 
+
+  const contractAddress = "0x8c3E8d22d2C4De891E107046D31B968f6D770a9d";
+  const listenersInitialized = useRef(false);
+
 
   const updateGameState = useCallback(async (gameId) => {
     if (!gameId || !contract) return;
@@ -131,18 +135,31 @@ const BlackjackPage = () => {
 
   // Setup contract event listeners with proper cleanup
   useEffect(() => {
-    if (!contract) return;
-
+    if (!contract || listenersInitialized.current) return;
+  
+    // Create a map to store our subscriptions
+    const subscriptions = new Map();
+  
     const setupEventSubscription = (eventName, handler) => {
+      // If we already have this subscription, clean it up first
+      if (subscriptions.has(eventName)) {
+        const existingSub = subscriptions.get(eventName);
+        if (existingSub && typeof existingSub.unsubscribe === 'function') {
+          existingSub.unsubscribe();
+        }
+      }
+  
       console.log(`Setting up subscription for event: ${eventName}`);
       try {
         if (!contract.events[eventName]) {
           console.error(`Event ${eventName} not found in contract`);
           return null;
         }
-
-        const subscription = contract.events[eventName]();
-
+  
+        const subscription = contract.events[eventName]({
+          fromBlock: 'latest' // Only listen to new events
+        });
+  
         subscription.on('data', (event) => {
           console.log(`Event received: ${eventName}`, event);
           try {
@@ -151,50 +168,65 @@ const BlackjackPage = () => {
             console.error(`Error handling ${eventName} event:`, error);
           }
         });
-
+  
         subscription.on('error', (error) => {
           console.error(`Error in ${eventName} subscription:`, error);
-          // Attempt to resubscribe on error after 5 seconds
-          setTimeout(() => setupEventSubscription(eventName, handler), 5000);
+          // Remove the errored subscription from our map
+          subscriptions.delete(eventName);
+          // Attempt to resubscribe after a delay
+          setTimeout(() => {
+            const newSub = setupEventSubscription(eventName, handler);
+            if (newSub) subscriptions.set(eventName, newSub);
+          }, 5000);
         });
-
+  
+        // Store the subscription
+        subscriptions.set(eventName, subscription);
         return subscription;
       } catch (error) {
         console.error(`Failed to setup ${eventName} subscription:`, error);
         return null;
       }
     };
-
-  // Existing subscriptions
-  const gameCreatedSub = setupEventSubscription('GameCreated', async (event) => {
-    const gameId = event.returnValues.gameId;
-    const player = event.returnValues.player;
-    const host = event.returnValues.host; // Adjust according to your contract
-    console.log(`GameCreated event received for gameId: ${gameId}`);
-    setActiveGame(gameId);
-    setPlayerAddress(player);
-    setDealerAddress(host);
-    updateGameState(gameId);
-  });
   
-
-  const cardDealtSub = setupEventSubscription('CardDealt', (event) => {
-    console.log(`CardDealt event:`, event);
-
-    const { recipient, value, suit, isDealer } = event.returnValues;
-    const newCard = {
-      value: Number(value),
-      suit: Number(suit)
-    };
-
-    if (isDealer === true || isDealer === 'true') {
-      setDealerCards(prev => [...prev, newCard]);
-    } else {
-      setPlayerCards(prev => [...prev, newCard]);
-    }
-
-    updateGameState(event.returnValues.gameId.toString());
-  });
+    // Set up all event subscriptions
+    setupEventSubscription('GameCreated', async (event) => {
+      const gameId = event.returnValues.gameId;
+      const player = event.returnValues.player;
+      const dealer = event.returnValues.dealer;
+      console.log(`GameCreated event received for gameId: ${gameId}`);
+      setActiveGame(gameId);
+      setPlayerAddress(player);
+      setDealerAddress(dealer);
+      updateGameState(gameId);
+    });
+  
+    setupEventSubscription('CardDealt', (event) => {
+      console.log(`CardDealt event:`, event);
+      const { value, suit, isDealer } = event.returnValues;
+      const newCard = {
+        value: Number(value),
+        suit: Number(suit)
+      };
+  
+      if (isDealer === true || isDealer === 'true') {
+        setDealerCards(prev => {
+          // Check if this card is already in the array
+          const isDuplicate = prev.some(card => 
+            card.value === newCard.value && card.suit === newCard.suit
+          );
+          return isDuplicate ? prev : [...prev, newCard];
+        });
+      } else {
+        setPlayerCards(prev => {
+          const isDuplicate = prev.some(card => 
+            card.value === newCard.value && card.suit === newCard.suit
+          );
+          return isDuplicate ? prev : [...prev, newCard];
+        });
+      }
+      updateGameState(event.returnValues.gameId.toString());
+    });
 
   const playerActionSub = setupEventSubscription('PlayerAction', (event) => {
     console.log(`PlayerAction event:`, event);
@@ -207,21 +239,16 @@ const BlackjackPage = () => {
     updateGameState(event.returnValues.gameId.toString());
   });
 
-  const gameCompleteSub = setupEventSubscription('GameComplete', (event) => {
-    console.log(`GameComplete event:`, event);
-    alert(
-      `Game Complete!\nResult: ${event.returnValues.result}\nPayout: ${
-        web3.utils.fromWei(event.returnValues.payout, 'ether')
-      } ETH`
-    );
-    setActiveGame(null);
-    setPlayerCards([]);
-    setDealerCards([]);
-    setSplitCards([]);
-    setGameState(null);
+const gameCompleteSub = setupEventSubscription('GameComplete', (event) => {
+  console.log(`GameComplete event:`, event);
+  setGameResult({
+    result: event.returnValues.result,
+    payout: web3.utils.fromWei(event.returnValues.payout, 'ether')
   });
+  setGameComplete(true);
+});
 
-  const playerTurnSub = setupEventSubscription('PlayerTurn', (event) => {
+const playerTurnSub = setupEventSubscription('PlayerTurn', (event) => {
     console.log(`PlayerTurn event:`, event);
     setGameState(prevState => ({
       ...prevState,
@@ -250,28 +277,16 @@ const BlackjackPage = () => {
   });
 
   return () => {
-    [
-      gameCreatedSub,
-      cardDealtSub,
-      playerActionSub,
-      dealerActionSub,
-      gameCompleteSub,
-      playerTurnSub,
-      dealerTurnSub,
-      splitHandStartedSub,
-      handBustedSub
-    ].forEach(sub => {
-      if (sub?.unsubscribe) {
-        sub.unsubscribe();
-        console.log(`Unsubscribed from event`);
-      } else if (sub?.off) {
-        sub.off('data');
-        sub.off('error');
-        console.log(`Removed 'data' and 'error' listeners`);
+    console.log('Cleaning up event subscriptions');
+    subscriptions.forEach(subscription => {
+      if (subscription && typeof subscription.unsubscribe === 'function') {
+        subscription.unsubscribe();
       }
     });
+    subscriptions.clear();
+    listenersInitialized.current = false;
   };
-}, [contract]);
+}, [contract, updateGameState]);
 
   // Fetch lobbies
   const fetchLobbies = useCallback(async () => {
@@ -351,7 +366,12 @@ const BlackjackPage = () => {
   const joinLobby = async (lobbyId, betAmount) => {
     setLoading(true);
     setError(null);
-    
+    // Empty card arrays
+    setPlayerCards([]);
+    setDealerCards([]);
+    setSplitCards([]);    
+    setGameComplete(false);
+    setGameResult(null);
     try {
       if (!web3 || !contract) {
         throw new Error("Web3 or contract not initialized");
@@ -472,17 +492,59 @@ const BlackjackPage = () => {
     console.log("Stand action triggered.");
     gameAction('stand');
   };
+
   const doubleDown = () => {
     if (!gameState) return;
     const value = web3.utils.toWei((Number(gameState.betAmount) * 2).toString(), "ether");
     console.log("Double Down action triggered with value:", value);
     gameAction('doubleDown', { value });
   };
+
   const split = () => {
     if (!gameState) return;
     const value = web3.utils.toWei((gameState.betAmount / 2).toString(), "ether");
     console.log("Split action triggered with value:", value);
     gameAction('split', { value });
+  };
+
+  const dealerGameAction = async (action) => {
+    if (!activeGame) {
+      console.warn("No active game to perform dealer actions on.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+  
+    try {
+      console.log(`Attempting to execute dealer action: ${action}`);
+      const tx = contract.methods[`dealer${action}`](activeGame);
+      const gas = await tx.estimateGas({
+        from: account
+      });
+      console.log(`Estimated gas for dealer${action}: ${gas}`);
+  
+      await tx.send({
+        from: account,
+        gas: Math.ceil(Number(gas) * 1.2)
+      });
+  
+      console.log(`Dealer action ${action} executed successfully.`);
+    } catch (error) {
+      console.error(`Error executing dealer ${action}:`, error);
+      setError(handleTransactionError(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const dealerHit = () => {
+    console.log("Dealer Hit action triggered.");
+    dealerGameAction('Hit');
+  };
+  
+  const dealerStand = () => {
+    console.log("Dealer Stand action triggered.");
+    dealerGameAction('Stand');
   };
 
   // Render error message if present
@@ -496,6 +558,17 @@ const BlackjackPage = () => {
     );
   };
 
+  const returnToLobby = () => {
+    setActiveGame(null);
+    setPlayerCards([]);
+    setDealerCards([]);
+    setSplitCards([]);
+    setGameState(null);
+    setGameResult(null);
+    setGameComplete(false);
+    fetchLobbies();
+  };
+  
   return (
     <div className="blackjack-page">
       {renderError()}
@@ -514,24 +587,29 @@ const BlackjackPage = () => {
           />
         </>
       ) : (
-        <BlackjackGame 
-          dealerCards={dealerCards}
-          playerCards={playerCards}
-          splitCards={splitCards}
-          dealerScore={gameState?.dealerScore}
-          playerScore={gameState?.playerScore}
-          canDouble={gameState?.canDouble}
-          canSplit={gameState?.canSplit}
-          isPlayerTurn={gameState?.isPlayerTurn}
-          loading={loading}
-          hit={hit}
-          stand={stand}
-          doubleDown={doubleDown}
-          split={split}
-          account={account}
-          playerAddress={playerAddress}
-          dealerAddress={dealerAddress}
-        />
+      <BlackjackGame 
+        dealerCards={dealerCards}
+        playerCards={playerCards}
+        splitCards={splitCards}
+        dealerScore={gameState?.dealerScore}
+        playerScore={gameState?.playerScore}
+        canDouble={gameState?.canDouble}
+        canSplit={gameState?.canSplit}
+        isPlayerTurn={gameState?.isPlayerTurn}
+        loading={loading}
+        hit={hit}
+        stand={stand}
+        doubleDown={doubleDown}
+        split={split}
+        dealerHit={dealerHit}
+        dealerStand={dealerStand}
+        account={account}
+        playerAddress={playerAddress}
+        dealerAddress={dealerAddress}
+        gameResult={gameResult}
+        gameComplete={gameComplete}
+        onReturnToLobby={returnToLobby}
+      />
       )}
     </div>
   );
