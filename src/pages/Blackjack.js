@@ -17,27 +17,52 @@ function Blackjack({ provider, signer, blackjackContract }) {
   const fetchGameState = async () => {
     try {
       const game = await blackjackContract.GetGame();
-      // Assume 'game' is an object with 'playerHand', 'dealerHand', and 'status' properties
-      setPlayerHand(game.playerHand.map(formatCard));
-      setDealerHand(game.dealerHand.map(formatCard));
-      setGameStatus(game.status); // Adjust according to your contract
+  
+      if (game.Id === 0) {
+        setMessage('No active game. Please start a new game.');
+        setGameState(null);
+        return;
+      }
+  
+      // Check if the game has started (cards dealt)
+      if (game.PlayerCardTotal === 0 && game.DealerCardTotal === 0) {
+        setMessage('Your game is initialized but hasn’t started yet. Place a bet to begin.');
+      } else {
+        setMessage('Welcome back to your game!');
+      }
+  
+      // Update UI state
+      setPlayerHand(game.PlayerCardTotal > 0 ? [game.PlayerCard1, game.PlayerCard2].map(formatCard) : []);
+      setDealerHand(game.DealerCardTotal > 0 ? [game.DealerCard1].map(formatCard) : []);
+      setGameStatus(game.DealerMsg || 'Awaiting next action...');
+      setGameState(game);
     } catch (error) {
       console.error('Error fetching game state:', error);
+      setMessage('Unable to fetch game state. Please try again.');
     }
   };
+  
+  
+  
 
   // Function to start a new game
+  const [depositAmount, setDepositAmount] = useState('0.1'); // Default to minimum deposit
+
   const startNewGame = async () => {
     try {
-      const tx = await blackjackContract.StartNewGame();
+      const depositInWei = ethers.utils.parseEther(depositAmount || '0.000001'); // Use default or user-provided deposit
+      const tx = await blackjackContract.StartNewGame({ value: depositInWei });
       await tx.wait();
       setMessage('New game started!');
       fetchGameState();
     } catch (error) {
       console.error('Error starting new game:', error);
-      setMessage('Error starting new game.');
+      const errorMessage = error.data?.message || error.message || 'Error starting new game.';
+      setMessage(errorMessage);
     }
   };
+  
+
 
   // Function to place a bet
   const placeBet = async () => {
@@ -88,32 +113,41 @@ function Blackjack({ provider, signer, blackjackContract }) {
   // Helper function to format card numbers to readable strings
   const formatCard = (cardNumber) => {
     const suits = ['Hearts', 'Diamonds', 'Clubs', 'Spades'];
-    const ranks = [
-      'Ace', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'Jack', 'Queen', 'King',
-    ];
-
-    const suit = suits[Math.floor(cardNumber / 13)];
-    const rank = ranks[cardNumber % 13];
-
+    const ranks = ['Ace', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'Jack', 'Queen', 'King'];
+  
+    if (!cardNumber || cardNumber < 1 || cardNumber > 52) {
+      return 'Unknown Card'; // Handle invalid card numbers gracefully
+    }
+  
+    const suit = suits[Math.floor((cardNumber - 1) / 13)];
+    const rank = ranks[(cardNumber - 1) % 13];
+  
     return `${rank} of ${suit}`;
   };
+  
 
   useEffect(() => {
-    const initializeGame = async () => {
+    const checkExistingGame = async () => {
       if (blackjackContract) {
         try {
-          // Start a new game if one doesn't exist
-          await blackjackContract.StartNewGame();
-          fetchGameState();
+          const game = await blackjackContract.GetGame();
+          if (game.Id !== 0) {
+            setMessage('Welcome back to your game!');
+            fetchGameState(); // Fetch game details if it exists
+          } else {
+            setMessage('No active game. Please start a new game.');
+          }
         } catch (error) {
-          console.error('Error initializing game:', error);
-          setMessage('Error initializing game.');
+          console.error('Error checking existing game:', error);
+          setMessage('Unable to fetch game state. Please check your connection.');
         }
       }
     };
   
-    initializeGame();
+    checkExistingGame();
   }, [blackjackContract]);
+  
+  
 
   return (
     <div className="blackjack-container">

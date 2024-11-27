@@ -1,4 +1,4 @@
-export const CONTRACT_ADDRESS = '0x5FbDB2315678afecb367f032d93F642f64180aa3'; // Replace with your contract address
+export const CONTRACT_ADDRESS = '0xf4Ae34af9244a9c12627FC6AAF197f9DE05bCd07'; // Replace with your contract address
 
 
 export const CONTRACT_ABI = [
