@@ -88,7 +88,7 @@ contract Blackjack {
     event HandBusted(uint256 indexed gameId, bool isSplitHand);
     event DealerAction(uint256 indexed gameId, string action);
     event DealerTurnComplete(uint256 indexed gameId, uint8 dealerScore);
-    event GameComplete(uint256 indexed gameId, string result, uint256 payout, uint8 playerScore, uint8 dealerScore);
+    event GameComplete(uint256 indexed gameId, string result, uint256 payout, uint8 playerScore, uint8 dealerScore, uint8[] playerCards, uint8[] dealerCards);
     event PlayerTurn(uint256 indexed gameId);
     event DealerTurn(uint256 indexed gameId);
 
@@ -613,15 +613,34 @@ contract Blackjack {
     }
 
     // Internal function to finalize game state
-    function _finalizeGameState(
-        uint256 gameId,
-        Game storage game,
-        string memory result,
-        uint256 payoutToPlayer
-    ) internal {
-        game.state = GameState.Complete;
-        emit GameComplete(gameId, result, payoutToPlayer, game.scores.playerScore, game.scores.dealerScore);
+function _finalizeGameState(
+    uint256 gameId,
+    Game storage game,
+    string memory result,
+    uint256 payoutToPlayer
+) internal {
+    game.state = GameState.Complete;
+
+    uint8[] memory playerCards = new uint8[](game.playerHand.length);
+    uint8[] memory dealerCards = new uint8[](game.dealerHand.length);
+
+    for (uint256 i = 0; i < game.playerHand.length; i++) {
+        playerCards[i] = CardLib.encodeCard(game.playerHand[i]);
     }
+    for (uint256 i = 0; i < game.dealerHand.length; i++) {
+        dealerCards[i] = CardLib.encodeCard(game.dealerHand[i]);
+    }
+
+    emit GameComplete(
+        gameId,
+        result,
+        payoutToPlayer,
+        game.scores.playerScore,
+        game.scores.dealerScore,
+        playerCards,
+        dealerCards
+    );
+}
 
     // ------------------ Helper Functions ------------------
 

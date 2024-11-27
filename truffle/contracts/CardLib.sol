@@ -45,6 +45,12 @@ library CardLib {
         return card.value > 10 ? 10 : card.value;
     }
 
+    function encodeCard(Card memory card) internal pure returns (uint8) {
+        require(card.value >= 1 && card.value <= 13, "Invalid card value");
+        require(card.suit >= 1 && card.suit <= 4, "Invalid card suit");
+        return (card.suit - 1) * 13 + (card.value - 1) + 1;
+    }
+
     // Calculates the total value of a hand, considering Aces as 1 or 11
     function calculateHandValue(Card[] memory hand) internal pure returns (uint8) {
         uint8 value = 0;

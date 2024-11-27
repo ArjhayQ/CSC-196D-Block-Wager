@@ -24,8 +24,9 @@ const BlackjackPage = () => {
   const [splitCards, setSplitCards] = useState([]);
   const [playerAddress, setPlayerAddress] = useState(null);
   const [dealerAddress, setDealerAddress] = useState(null);
+  const [isReviewPhase, setIsReviewPhase] = useState(false);
   
-  const contractAddress = "0xE81c7131C75b57aaFe1b4d1c8C5296B22bA8e06b";
+  const contractAddress = "0x878207d557E5299EA419793d6A710f6794546577";
 
   const updateGameState = useCallback(async (gameId) => {
     if (!gameId || !contract) return;
@@ -179,21 +180,31 @@ const BlackjackPage = () => {
   
 
   const cardDealtSub = setupEventSubscription('CardDealt', (event) => {
-    console.log(`CardDealt event:`, event);
-
+    console.log(`CardDealt event received:`, event);
+  
     const { recipient, value, suit, isDealer } = event.returnValues;
     const newCard = {
       value: Number(value),
-      suit: Number(suit)
+      suit: Number(suit),
     };
-
+  
     if (isDealer === true || isDealer === 'true') {
-      setDealerCards(prev => [...prev, newCard]);
+      setDealerCards(prev => {
+        if (prev.some(card => card.value === newCard.value && card.suit === newCard.suit)) {
+          console.log("Duplicate dealer card detected, ignoring:", newCard);
+          return prev;
+        }
+        return [...prev, newCard];
+      });
     } else {
-      setPlayerCards(prev => [...prev, newCard]);
+      setPlayerCards(prev => {
+        if (prev.some(card => card.value === newCard.value && card.suit === newCard.suit)) {
+          console.log("Duplicate player card detected, ignoring:", newCard);
+          return prev;
+        }
+        return [...prev, newCard];
+      });
     }
-
-    updateGameState(event.returnValues.gameId.toString());
   });
 
   const playerActionSub = setupEventSubscription('PlayerAction', (event) => {
@@ -207,18 +218,37 @@ const BlackjackPage = () => {
     updateGameState(event.returnValues.gameId.toString());
   });
 
+  const decodeCard = (card) => ({
+    value: card % 13 === 0 ? 13 : card % 13, // Card value (1-13)
+    suit: Math.floor((card - 1) / 13) + 1,  // Card suit (1-4)
+  });
+  
   const gameCompleteSub = setupEventSubscription('GameComplete', (event) => {
-    console.log(`GameComplete event:`, event);
+    console.log(`GameComplete event received:`, event);
+  
+    // Decode player and dealer cards
+    const finalDealerCards = event.returnValues.dealerCards.map(decodeCard) || [];
+    const finalPlayerCards = event.returnValues.playerCards.map(decodeCard) || [];
+    
+    const result = event.returnValues.result; // Result: "Player Wins", "Dealer Wins", "Push"
+    const payout = web3.utils.fromWei(event.returnValues.payout, 'ether'); // Payout in ETH
+  
+    // Update state with final hands and result
+    setDealerCards(finalDealerCards);
+    setPlayerCards(finalPlayerCards);
+  
+    setGameState((prevState) => ({
+      ...prevState,
+      result,
+      payout,
+    }));
+  
+    // Transition to review phase
+    setIsReviewPhase(true);
+  
     alert(
-      `Game Complete!\nResult: ${event.returnValues.result}\nPayout: ${
-        web3.utils.fromWei(event.returnValues.payout, 'ether')
-      } ETH`
+      `Game Over!\n${result}\nPayout: ${payout} ETH`
     );
-    setActiveGame(null);
-    setPlayerCards([]);
-    setDealerCards([]);
-    setSplitCards([]);
-    setGameState(null);
   });
 
   const playerTurnSub = setupEventSubscription('PlayerTurn', (event) => {
@@ -468,9 +498,23 @@ const BlackjackPage = () => {
     console.log("Hit action triggered.");
     gameAction('hit');
   };
-  const stand = () => {
+  const stand = async () => {
     console.log("Stand action triggered.");
-    gameAction('stand');
+    setLoading(true);
+    try {
+      // Execute the "stand" action in the contract
+      await gameAction('stand');
+  
+      // Update game state after the dealer finishes their turn
+      setTimeout(() => {
+        setIsReviewPhase(true); // Transition to the review phase
+      }, 1000); // Small delay for UI responsiveness
+    } catch (error) {
+      console.error("Error during stand action:", error);
+      setError(handleTransactionError(error));
+    } finally {
+      setLoading(false);
+    }
   };
   const doubleDown = () => {
     if (!gameState) return;
@@ -496,12 +540,89 @@ const BlackjackPage = () => {
     );
   };
 
+  const resetGame = () => {
+    setActiveGame(null);
+    setPlayerCards([]);
+    setDealerCards([]);
+    setSplitCards([]);
+    setGameState(null);
+    setIsReviewPhase(false);
+  };
+
   return (
     <div className="blackjack-page">
       {renderError()}
-      
-      {!activeGame ? (
-        <>
+  
+      {isReviewPhase ? (
+  <div className="game-container">
+    <h2>Game Over</h2>
+
+    <div className="dealer-area">
+      <h3>Dealer's Final Hand</h3>
+      <div className="hand">
+        {dealerCards.map((card, index) => (
+          <div
+            key={index}
+            className={`card ${card.suit === 1 || card.suit === 3 ? 'black' : 'red'}`}
+          >
+            <div className="card-value">{card.value}</div>
+            <div className="card-suit">
+              {card.suit === 1 && '♠'} {/* Spades */}
+              {card.suit === 2 && '♥'} {/* Hearts */}
+              {card.suit === 3 && '♣'} {/* Clubs */}
+              {card.suit === 4 && '♦'} {/* Diamonds */}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    <div className="player-area">
+      <h3>Player's Final Hand</h3>
+      <div className="hand">
+        {playerCards.map((card, index) => (
+          <div
+            key={index}
+            className={`card ${card.suit === 1 || card.suit === 3 ? 'black' : 'red'}`}
+          >
+            <div className="card-value">{card.value}</div>
+            <div className="card-suit">
+              {card.suit === 1 && '♠'} {/* Spades */}
+              {card.suit === 2 && '♥'} {/* Hearts */}
+              {card.suit === 3 && '♣'} {/* Clubs */}
+              {card.suit === 4 && '♦'} {/* Diamonds */}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    <div className="scores">
+      <div>
+        <strong>Dealer's Score:</strong> {gameState?.dealerScore || 0}
+      </div>
+      <div>
+        <strong>Player's Score:</strong> {gameState?.playerScore || 0}
+      </div>
+    </div>
+
+    <div className="results">
+      <p>
+        <strong>Result:</strong> {gameState?.result || "Unknown"}
+      </p>
+      <p>
+        <strong>Payout:</strong> {gameState?.payout || 0} ETH
+      </p>
+    </div>
+
+    <div className="actions">
+      <button onClick={() => resetGame()} className="create-lobby-btn">
+        Confirm and Return
+      </button>
+    </div>
+  </div>
+) : (
+        !activeGame ? (
           <BlackjackLobby 
             lobbies={lobbies}
             account={account}
@@ -512,26 +633,26 @@ const BlackjackPage = () => {
             contract={contract}
             onLobbyUpdate={fetchLobbies}
           />
-        </>
-      ) : (
-        <BlackjackGame 
-          dealerCards={dealerCards}
-          playerCards={playerCards}
-          splitCards={splitCards}
-          dealerScore={gameState?.dealerScore}
-          playerScore={gameState?.playerScore}
-          canDouble={gameState?.canDouble}
-          canSplit={gameState?.canSplit}
-          isPlayerTurn={gameState?.isPlayerTurn}
-          loading={loading}
-          hit={hit}
-          stand={stand}
-          doubleDown={doubleDown}
-          split={split}
-          account={account}
-          playerAddress={playerAddress}
-          dealerAddress={dealerAddress}
-        />
+        ) : (
+          <BlackjackGame 
+            dealerCards={dealerCards}
+            playerCards={playerCards}
+            splitCards={splitCards}
+            dealerScore={gameState?.dealerScore}
+            playerScore={gameState?.playerScore}
+            canDouble={gameState?.canDouble}
+            canSplit={gameState?.canSplit}
+            isPlayerTurn={gameState?.isPlayerTurn}
+            loading={loading}
+            hit={hit}
+            stand={stand}
+            doubleDown={doubleDown}
+            split={split}
+            account={account}
+            playerAddress={playerAddress}
+            dealerAddress={dealerAddress}
+          />
+        )
       )}
     </div>
   );
