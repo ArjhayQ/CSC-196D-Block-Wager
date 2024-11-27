@@ -1,7 +1,6 @@
 import React from 'react';
-import { Card } from './Card';
 import { User, UserCog } from 'lucide-react';
-import '../styles/BlackjackGame.css';
+import { Card } from './Card';
 
 const BlackjackGame = ({
   dealerCards,
@@ -34,17 +33,18 @@ const BlackjackGame = ({
   const isPlayer = normalizedAccount === normalizedPlayerAddress;
   const isSpectator = !isDealer && !isPlayer;
 
-  // Fixed visibility logic - only first card is shown for dealer until game ends
+  // Dealer card visibility - dealer's hole card is hidden until game ends
   const isDealerCardVisible = (index) => {
-    if (isDealer) return true; // Dealer sees all their cards
+    if (gameComplete) return true; // All cards visible when game is complete
+    if (isDealer) return true; // Dealer sees all their own cards
     return index === 0; // Others only see the first card until game ends
   };
 
-  // Fixed player card visibility - only player can see their cards during their turn
+  // Player card visibility - cards are only visible to the player themselves
   const isPlayerCardVisible = (index) => {
-    if (isPlayer) return true; // Player always sees their cards
-    if (!isPlayerTurn) return true; // After player turn, cards are revealed to all
-    return false; // During player turn, others can't see their cards
+    if (gameComplete) return true; // All cards visible when game ends
+    if (isPlayer) return true; // Player always sees their own cards
+    return false; // Dealer and spectators can't see player's cards during the game
   };
 
   const renderCard = (card, index, isHidden = false) => {
@@ -97,9 +97,9 @@ const BlackjackGame = ({
     </div>
   );
 
-  // Show scores based on visibility rules
-  const showDealerScore = isDealer || !isPlayerTurn;
-  const showPlayerScore = isPlayer || !isPlayerTurn;
+  // Show scores based on visibility and game state
+  const showDealerScore = gameComplete || isDealer;
+  const showPlayerScore = gameComplete || isPlayer;
 
   const truncateAddress = (address) => {
     if (!address) return '';
@@ -119,7 +119,10 @@ const BlackjackGame = ({
       <div className={`p-4 border-2 rounded-lg my-4 ${resultClasses[gameResult.result] || 'bg-gray-100 border-gray-500'}`}>
         <h3 className="text-lg font-bold mb-2">Game Complete</h3>
         <p className="mb-2">Result: {gameResult.result}</p>
-        <p className="mb-4">Payout: {gameResult.payout} ETH</p>
+        <p className="mb-2">Player Hand: {gameResult.playerScore}</p>
+        <p className="mb-2">Dealer Hand: {gameResult.dealerScore}</p>
+        <p className="mb-2">Player Payout: {gameResult.playerPayout} ETH</p>
+        <p className="mb-4">Dealer Payout: {gameResult.dealerPayout} ETH</p>
         <button
           onClick={onReturnToLobby}
           className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
@@ -183,7 +186,7 @@ const BlackjackGame = ({
           <p className="text-lg">Score: {dealerScore}</p>
         )}
         
-        {!isPlayerTurn && isDealer && (
+        {!isPlayerTurn && isDealer && !gameComplete && (
           <div className="flex gap-2">
             <button 
               onClick={dealerHit} 
@@ -264,7 +267,6 @@ const BlackjackGame = ({
       </div>
 
       {renderGameStatus()}
-
 
       {/* Loading Overlay */}
       {loading && (

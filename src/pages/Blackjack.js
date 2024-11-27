@@ -27,8 +27,9 @@ const BlackjackPage = () => {
   const [gameResult, setGameResult] = useState(null);
   const [gameComplete, setGameComplete] = useState(false); 
 
-  const contractAddress = "0x8c3E8d22d2C4De891E107046D31B968f6D770a9d";
+  const contractAddress = "0x9805e799E9902a9EC4073C89c09e247D0A41D5E3";
   const listenersInitialized = useRef(false);
+  const [processedEvents] = useState(new Set());
 
 
   const updateGameState = useCallback(async (gameId) => {
@@ -162,10 +163,19 @@ const BlackjackPage = () => {
   
         subscription.on('data', (event) => {
           console.log(`Event received: ${eventName}`, event);
-          try {
-            handler(event);
-          } catch (error) {
-            console.error(`Error handling ${eventName} event:`, error);
+          // Create unique event identifier
+          const eventId = `${event.blockHash}-${event.logIndex}-${eventName}`;
+          
+          // Only process if we haven't seen this exact event before
+          if (!processedEvents.has(eventId)) {
+            processedEvents.add(eventId);
+            try {
+              handler(event);
+            } catch (error) {
+              console.error(`Error handling ${eventName} event:`, error);
+            }
+          } else {
+            console.log(`Skipping duplicate event: ${eventId}`);
           }
         });
   
@@ -198,6 +208,8 @@ const BlackjackPage = () => {
       setActiveGame(gameId);
       setPlayerAddress(player);
       setDealerAddress(dealer);
+      setGameComplete(false);
+      setGameResult(null);
       updateGameState(gameId);
     });
   
@@ -206,29 +218,27 @@ const BlackjackPage = () => {
       const { value, suit, isDealer } = event.returnValues;
       const newCard = {
         value: Number(value),
-        suit: Number(suit)
+        suit: Number(suit),
+        // Add unique identifier for the card
+        eventId: `${event.blockHash}-${event.logIndex}`
       };
-  
+    
       if (isDealer === true || isDealer === 'true') {
         setDealerCards(prev => {
-          // Check if this card is already in the array
-          const isDuplicate = prev.some(card => 
-            card.value === newCard.value && card.suit === newCard.suit
-          );
+          // Check for duplicate using eventId
+          const isDuplicate = prev.some(card => card.eventId === newCard.eventId);
           return isDuplicate ? prev : [...prev, newCard];
         });
       } else {
         setPlayerCards(prev => {
-          const isDuplicate = prev.some(card => 
-            card.value === newCard.value && card.suit === newCard.suit
-          );
+          const isDuplicate = prev.some(card => card.eventId === newCard.eventId);
           return isDuplicate ? prev : [...prev, newCard];
         });
       }
       updateGameState(event.returnValues.gameId.toString());
     });
 
-  const playerActionSub = setupEventSubscription('PlayerAction', (event) => {
+    const playerActionSub = setupEventSubscription('PlayerAction', (event) => {
     console.log(`PlayerAction event:`, event);
     // Handle specific actions if necessary
     updateGameState(event.returnValues.gameId.toString());
@@ -243,7 +253,10 @@ const gameCompleteSub = setupEventSubscription('GameComplete', (event) => {
   console.log(`GameComplete event:`, event);
   setGameResult({
     result: event.returnValues.result,
-    payout: web3.utils.fromWei(event.returnValues.payout, 'ether')
+    playerPayout: web3.utils.fromWei(event.returnValues.playerPayout, 'ether'),
+    dealerPayout: web3.utils.fromWei(event.returnValues.dealerPayout, 'ether'),
+    playerScore: event.returnValues.playerScore.toString(),
+    dealerScore: event.returnValues.dealerScore.toString()
   });
   setGameComplete(true);
 });
