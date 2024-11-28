@@ -9,15 +9,13 @@ contract Blackjack {
     // Enums
     enum LobbyStatus { Open, InProgress, Completed, Cancelled }
     enum GameState { Open, Dealing, PlayerTurn, DealerTurn, Complete }
-    enum ActionState { None, Split, Doubled }
 
     // Constants
     uint8 constant DEALER_MIN_STAND = 17;
     uint8 constant BLACKJACK = 21;
     uint8 constant ACE_HIGH = 11;
     uint8 constant ACE_LOW = 1;
-    uint256 constant BLACKJACK_MULTIPLIER = 150; // 3:2 payout
-    uint256 constant NORMAL_MULTIPLIER = 200;    // 2:1 payout
+    uint256 constant BLACKJACK_MULTIPLIER = 250; // 3:2 payout represented as 250 basis points
     uint256 constant MULTIPLIER_BASE = 100;      // Base for multiplier calculations
     uint256 constant LOBBY_TIMEOUT = 1 hours;
     uint256 constant GAME_TIMEOUT = 30 minutes;
@@ -25,8 +23,6 @@ contract Blackjack {
 
     // Using CardLib's Card struct
     using CardLib for CardLib.Card;
-
-    // Card struct is now part of CardLib
 
     // Scores struct to store player and dealer scores
     struct Scores {
@@ -37,8 +33,8 @@ contract Blackjack {
     // Lobby struct to handle game creation and joining
     struct Lobby {
         uint256 lobbyId;
-        address payable host;
-        uint256 betAmount;
+        address payable dealer; // Dealer's address
+        uint256 betAmount;      // Player's bet amount
         LobbyStatus status;
         uint256 gameId;
         uint256 creationTime;
@@ -46,25 +42,20 @@ contract Blackjack {
 
     // Game struct to store all game-related data
     struct Game {
-        address payable player;
-        address payable dealer;
-        uint256 betAmount;
-        uint256 dealerStake;
+        address payable player; // Player's address
+        address payable dealer; // Dealer's address
+        uint256 betAmount;      // Player's bet
+        uint256 dealerStake;    // Dealer's stake (1.5x bet)
         CardLib.Card[] playerHand;
         CardLib.Card[] dealerHand;
-        CardLib.Card[] splitHand;
         uint256 gameId;
         GameState state;
-        ActionState actionState;
         bool isBlackjack;
         bool playerBusted;
         bool dealerBusted;
-        bool isSplitHand;
         Scores scores;
         bool[] usedCards;
         uint256 lastActionTime;
-        bool splitHandCompleted;
-        uint256 splitBetAmount;
         bytes32 randomnessCommit;
     }
 
@@ -77,17 +68,15 @@ contract Blackjack {
     uint256 public maxBet;
 
     // Events
-    event LobbyCreated(uint256 indexed lobbyId, address indexed host, uint256 betAmount);
+    event LobbyCreated(uint256 indexed lobbyId, address indexed dealer, uint256 betAmount);
     event LobbyJoined(uint256 indexed lobbyId, address indexed player);
-    event LobbyCancelled(uint256 indexed lobbyId, address indexed host, uint256 refundAmount);
+    event LobbyCancelled(uint256 indexed lobbyId, address indexed dealer, uint256 refundAmount);
     event LobbyTimeout(uint256 indexed lobbyId);
     event GameCreated(uint256 indexed gameId, address indexed player, address indexed dealer, uint256 betAmount);
     event CardDealt(uint256 indexed gameId, address indexed recipient, uint8 value, uint8 suit, bool isDealer);
     event PlayerAction(uint256 indexed gameId, string action);
-    event SplitHandStarted(uint256 indexed gameId);
-    event HandBusted(uint256 indexed gameId, bool isSplitHand);
+    event HandBusted(uint256 indexed gameId);
     event DealerAction(uint256 indexed gameId, string action);
-    event DealerTurnComplete(uint256 indexed gameId, uint8 dealerScore);
     event GameComplete(uint256 indexed gameId, string result, uint256 playerPayout, uint256 dealerPayout, uint8 playerScore, uint8 dealerScore);
     event PlayerTurn(uint256 indexed gameId);
     event DealerTurn(uint256 indexed gameId);
@@ -119,14 +108,14 @@ contract Blackjack {
         return trimmedLobbies;
     }
 
-    // Create a new lobby
-    function createLobby() external payable {
-        require(msg.value >= minBet * 3 / 2 && msg.value <= maxBet * 3 / 2, "Invalid dealer stake amount");
+    // Create a new lobby as Dealer
+    function createLobby(uint256 betAmount) external payable {
+        require(betAmount >= minBet && betAmount <= maxBet, "Bet amount out of range");
+        require(msg.value == (betAmount * 3) / 2, "Dealer must stake 1.5x the bet amount");
 
-        uint256 betAmount = msg.value * 2 / 3; // Dealer stakes 1.5x the bet amount
         lobbies[lobbyCounter] = Lobby({
             lobbyId: lobbyCounter,
-            host: payable(msg.sender),
+            dealer: payable(msg.sender),
             betAmount: betAmount,
             status: LobbyStatus.Open,
             gameId: 0,
@@ -140,22 +129,22 @@ contract Blackjack {
     // Cancel lobby
     function cancelLobby(uint256 lobbyId) external {
         Lobby storage lobby = lobbies[lobbyId];
-        require(msg.sender == lobby.host, "Only host can cancel");
+        require(msg.sender == lobby.dealer, "Only dealer can cancel");
         require(lobby.status == LobbyStatus.Open, "Lobby not open");
 
         lobby.status = LobbyStatus.Cancelled;
-        uint256 refundAmount = lobby.betAmount * 3 / 2;
-        lobby.host.transfer(refundAmount);
+        uint256 refundAmount = (lobby.betAmount * 3) / 2;
+        lobby.dealer.transfer(refundAmount);
 
         emit LobbyCancelled(lobbyId, msg.sender, refundAmount);
     }
 
-    // Join an existing lobby and start the game
+    // Join an existing lobby as Player and start the game
     function joinLobby(uint256 lobbyId) external payable {
         Lobby storage lobby = lobbies[lobbyId];
         require(lobbyId < lobbyCounter, "Invalid lobby ID");
         require(lobby.status == LobbyStatus.Open, "Lobby not open");
-        require(msg.sender != lobby.host, "Cannot join your own lobby");
+        require(msg.sender != lobby.dealer, "Dealer cannot join their own lobby");
         require(msg.value == lobby.betAmount, "Incorrect bet amount");
         require(lobby.gameId == 0, "Game already started");
         require(block.timestamp <= lobby.creationTime + LOBBY_TIMEOUT, "Lobby has expired");
@@ -178,8 +167,8 @@ contract Blackjack {
                 block.timestamp > lobbies[i].creationTime + LOBBY_TIMEOUT
             ) {
                 lobbies[i].status = LobbyStatus.Cancelled;
-                uint256 refundAmount = lobbies[i].betAmount * 3 / 2;
-                lobbies[i].host.transfer(refundAmount);
+                uint256 refundAmount = (lobbies[i].betAmount * 3) / 2;
+                lobbies[i].dealer.transfer(refundAmount);
                 emit LobbyTimeout(i);
             }
         }
@@ -192,20 +181,16 @@ contract Blackjack {
         // Initialize game
         Game storage newGame = games[currentGameId];
         newGame.player = payable(player);
-        newGame.dealer = lobby.host;
+        newGame.dealer = lobby.dealer;
         newGame.betAmount = lobby.betAmount;
-        newGame.dealerStake = lobby.betAmount * 3 / 2;
+        newGame.dealerStake = (lobby.betAmount * 3) / 2;
         newGame.gameId = currentGameId;
         newGame.state = GameState.Open;
-        newGame.actionState = ActionState.None;
         newGame.isBlackjack = false;
         newGame.playerBusted = false;
         newGame.dealerBusted = false;
-        newGame.isSplitHand = false;
         newGame.scores = Scores(0, 0);
         newGame.lastActionTime = block.timestamp;
-        newGame.splitHandCompleted = false;
-        newGame.splitBetAmount = 0;
         newGame.randomnessCommit = _generateCommit(currentGameId);
 
         // Initialize usedCards array with proper length
@@ -215,7 +200,7 @@ contract Blackjack {
             newGame.usedCards[i] = false;
         }
 
-        emit GameCreated(currentGameId, player, lobby.host, lobby.betAmount);
+        emit GameCreated(currentGameId, player, lobby.dealer, lobby.betAmount);
 
         // Deal initial cards
         _dealInitialCards(currentGameId);
@@ -262,7 +247,7 @@ contract Blackjack {
             block.prevrandao,
             gameId,
             game.randomnessCommit,
-            game.playerHand.length + game.dealerHand.length + game.splitHand.length
+            game.playerHand.length + game.dealerHand.length
         )));
 
         // Generate a random card that hasn't been used
@@ -277,25 +262,10 @@ contract Blackjack {
         if (toDealer) {
             game.dealerHand.push(newCard);
             emit CardDealt(gameId, game.dealer, newCard.value, newCard.suit, true);
-        } else if (game.isSplitHand) {
-            game.splitHand.push(newCard);
-            emit CardDealt(gameId, game.player, newCard.value, newCard.suit, false);
         } else {
             game.playerHand.push(newCard);
             emit CardDealt(gameId, game.player, newCard.value, newCard.suit, false);
         }
-    }
-
-    // Internal helper to check if a card has already been used
-    function _isCardUsed(Game storage game, CardLib.Card memory card) internal view returns (bool) {
-        uint256 cardIndex = (card.suit - 1) * 13 + (card.value - 1);
-        return game.usedCards[cardIndex];
-    }
-
-    // Internal helper to mark a card as used
-    function _markCardAsUsed(Game storage game, CardLib.Card memory card) internal {
-        uint256 cardIndex = (card.suit - 1) * 13 + (card.value - 1);
-        game.usedCards[cardIndex] = true;
     }
 
     // Player action: Hit
@@ -308,139 +278,31 @@ contract Blackjack {
         // Deal card
         _dealCard(gameId, false);
 
-        // Update the correct hand's score
-        if (game.isSplitHand) {
-            game.scores.playerScore = CardLib.calculateHandValue(game.splitHand);
-        } else {
-            game.scores.playerScore = CardLib.calculateHandValue(game.playerHand);
-        }
+        game.scores.playerScore = CardLib.calculateHandValue(game.playerHand);
 
         if (game.scores.playerScore > BLACKJACK) {
             game.playerBusted = true;
-            if (game.actionState == ActionState.Split && !game.splitHandCompleted) {
-                // Switch to split hand
-                game.splitHandCompleted = true;
-                game.isSplitHand = true;
-                game.playerBusted = false;
-                game.scores.playerScore = CardLib.calculateHandValue(game.splitHand);
-                emit PlayerAction(gameId, "Switch to split hand");
-                emit PlayerTurn(gameId); // Emit PlayerTurn for split hand
-            } else {
-                emit HandBusted(gameId, game.isSplitHand);
-                _endGame(gameId);
-            }
+            emit HandBusted(gameId);
+            _endGame(gameId);
         }
 
         game.lastActionTime = block.timestamp;
         emit PlayerAction(gameId, "Hit");
     }
 
-
     // Player action: Stand
     function stand(uint256 gameId) external {
         Game storage game = games[gameId];
         require(msg.sender == game.player, "Not your game");
         require(game.state == GameState.PlayerTurn, "Not player's turn");
-
-        if (game.actionState == ActionState.Split && !game.splitHandCompleted) {
-            // Switch to the split hand
-            game.splitHandCompleted = true;
-            game.isSplitHand = true;
-            game.scores.playerScore = CardLib.calculateHandValue(game.splitHand);
-            emit PlayerAction(gameId, "Switch to split hand");
-        } else {
-            game.state = GameState.DealerTurn;
-            emit DealerTurn(gameId); // Emit DealerTurn event
-            _dealerTurn(gameId);
-        }
+        game.state = GameState.DealerTurn;
+        _dealerTurn(gameId);
 
         game.lastActionTime = block.timestamp;
         emit PlayerAction(gameId, "Stand");
     }
 
-
-    // Player action: Double Down
-    function doubleDown(uint256 gameId) external payable {
-        Game storage game = games[gameId];
-        require(msg.sender == game.player, "Not your game");
-        require(game.state == GameState.PlayerTurn, "Not player's turn");
-        require(game.playerHand.length == 2, "Can only double down on initial hand");
-        require(msg.value == game.betAmount, "Must match original bet");
-        require(game.actionState == ActionState.None, "Cannot double after split");
-
-        game.betAmount += msg.value;
-        game.actionState = ActionState.Doubled;
-
-        // Deal one card and end player's turn
-        _dealCard(gameId, false);
-        game.scores.playerScore = CardLib.calculateHandValue(game.playerHand);
-
-        if (game.scores.playerScore > BLACKJACK) {
-            game.playerBusted = true;
-            emit HandBusted(gameId, false);
-            _endGame(gameId);
-        } else {
-            game.state = GameState.DealerTurn;
-            _dealerTurn(gameId);
-        }
-
-        game.lastActionTime = block.timestamp;
-        emit PlayerAction(gameId, "Double Down");
-    }
-
-    // Player action: Split
-    function split(uint256 gameId) external payable {
-        Game storage game = games[gameId];
-        _validateSplitConditions(game, msg.sender, msg.value);
-
-        _executeSplit(game, gameId);
-
-        game.lastActionTime = block.timestamp;
-        emit SplitHandStarted(gameId);
-        emit PlayerAction(gameId, "Split");
-    }
-
-    // Internal function to validate split conditions
-    function _validateSplitConditions(
-        Game storage game,
-        address sender,
-        uint256 value
-    ) internal view {
-        require(sender == game.player, "Not your game");
-        require(game.state == GameState.PlayerTurn, "Not player's turn");
-        require(game.playerHand.length == 2, "Can only split initial hand");
-        require(game.actionState == ActionState.None, "Cannot split after other actions");
-        require(value == game.betAmount, "Must match original bet");
-
-        // Get card values, handling face cards
-        uint8 card1Value = CardLib.getCardValue(game.playerHand[0]);
-        uint8 card2Value = CardLib.getCardValue(game.playerHand[1]);
-        require(card1Value == card2Value, "Can only split equal value cards");
-    }
-
-    // Internal function to execute split
-    function _executeSplit(Game storage game, uint256 gameId) internal {
-        game.splitBetAmount = game.betAmount;
-        game.actionState = ActionState.Split;
-
-        // Remove second card from player's hand
-        CardLib.Card memory secondCard = game.playerHand[1];
-        game.playerHand.pop();
-
-        // Initialize split hand and add the second card
-        game.splitHand.push(secondCard);
-
-        // Deal new cards to both hands
-        _dealCard(gameId, false); // To first hand
-        game.isSplitHand = true; // Next card goes to split hand
-        _dealCard(gameId, false); // To split hand
-        game.isSplitHand = false; // Reset back to first hand
-
-        // Update scores
-        game.scores.playerScore = CardLib.calculateHandValue(game.playerHand);
-    }
-
-    // Modified dealer turn to be manual instead of automatic
+    // Dealer action: Hit
     function dealerHit(uint256 gameId) external {
         Game storage game = games[gameId];
         require(msg.sender == game.dealer, "Only dealer can perform this action");
@@ -460,45 +322,20 @@ contract Blackjack {
         emit DealerAction(gameId, "Hit");
     }
 
+    // Dealer action: Stand
     function dealerStand(uint256 gameId) external {
         Game storage game = games[gameId];
         require(msg.sender == game.dealer, "Only dealer can perform this action");
         require(game.state == GameState.DealerTurn, "Not dealer's turn");
 
         emit DealerAction(gameId, "Stand");
-        emit DealerTurnComplete(gameId, game.scores.dealerScore);
         _endGame(gameId);
     }
 
-    // Remove the automatic _dealerTurn implementation
     function _dealerTurn(uint256 gameId) internal {
         Game storage game = games[gameId];
         require(game.state == GameState.DealerTurn, "Not dealer's turn");
         emit DealerTurn(gameId);
-    }
-
-    // Internal function to determine if dealer should hit
-    function _shouldDealerHit(CardLib.Card[] memory hand, uint8 score) internal pure returns (bool) {
-        if (score >= DEALER_MIN_STAND) {
-            // Check for soft 17 (Ace + 6)
-            if (score == 17) {
-                bool hasAce = false;
-                uint8 nonAceSum = 0;
-
-                for (uint8 i = 0; i < hand.length; i++) {
-                    if (hand[i].value == 1) { // Ace
-                        hasAce = true;
-                    } else {
-                        nonAceSum += (hand[i].value > 10 ? 10 : hand[i].value);
-                    }
-                }
-
-                // If it's a soft 17 (Ace counting as 11 + 6), dealer must hit
-                return hasAce && nonAceSum == 6;
-            }
-            return false;
-        }
-        return true;
     }
 
     // Game resolution
@@ -510,22 +347,16 @@ contract Blackjack {
 
         // Handle payouts
         if (payoutToPlayer > 0) {
-            payable(game.player).transfer(payoutToPlayer);
+            game.player.transfer(payoutToPlayer);
         }
 
         if (payoutToDealer > 0) {
-            payable(game.dealer).transfer(payoutToDealer);
+            game.dealer.transfer(payoutToDealer);
         }
 
         _finalizeGameState(gameId, game, result, payoutToPlayer, payoutToDealer);
 
-        // Update lobby status
-        for (uint256 i = 0; i < lobbyCounter; i++) {
-            if (lobbies[i].gameId == gameId) {
-                lobbies[i].status = LobbyStatus.Completed;
-                break;
-            }
-        }
+        // No need to update lobby status since each lobby is tied to one game
     }
 
     // Internal function to calculate game payout
@@ -534,25 +365,29 @@ contract Blackjack {
         view
         returns (uint256 payoutToPlayer, uint256 payoutToDealer, string memory result)
     {
-        uint256 playerPayout = _calculateMainHandPayout(game);
+        uint256 totalFunds = game.betAmount + game.dealerStake;
+        uint256 playerWinnings = _calculateMainHandPayout(game);
+        uint256 playerTotalPayout = game.betAmount + playerWinnings; // Player's original bet + winnings
+        uint256 dealerTotalPayout = totalFunds - playerTotalPayout; // Remaining funds to dealer
 
-        if (game.actionState == ActionState.Split) {
-            playerPayout += _calculateSplitHandPayout(game);
-        }
+        payoutToPlayer = playerWinnings > 0 ? playerTotalPayout : 0;
+        payoutToDealer = dealerTotalPayout > 0 ? dealerTotalPayout : 0;
 
-        if (playerPayout > 0) {
-            //result = "Player Wins";
-            payoutToPlayer = playerPayout;
-            payoutToDealer = 0;
-        } else if (playerPayout == 0 && !game.playerBusted && !game.dealerBusted && game.scores.playerScore == game.scores.dealerScore) {
-            // Push - return bets
-            result = "Push";
-            payoutToPlayer = game.betAmount + game.splitBetAmount; // Return player's bets
-            payoutToDealer = game.dealerStake - (game.betAmount + game.splitBetAmount); // Return remaining dealer stake
+        if (game.playerBusted) {
+            result = "Dealer wins";
+        } else if (game.dealerBusted) {
+            result = "Player wins";
+        } else if (game.isBlackjack && game.scores.dealerScore != BLACKJACK) {
+            result = "Player wins with Blackjack";
+        } else if (game.scores.playerScore > game.scores.dealerScore) {
+            result = "Player wins";
+        } else if (game.scores.playerScore == game.scores.dealerScore) {
+            // Push - return player's original bet to the player
+            payoutToPlayer = game.betAmount;
+            payoutToDealer = game.dealerStake;
+            result = "Push/Draw";
         } else {
-            result = "Dealer Wins";
-            payoutToPlayer = 0;
-            payoutToDealer = game.dealerStake + game.betAmount + game.splitBetAmount; // Dealer takes the bets
+            result = "Dealer wins";
         }
     }
 
@@ -565,21 +400,6 @@ contract Blackjack {
             game.playerBusted,
             game.dealerBusted,
             game.isBlackjack
-        );
-    }
-
-    // Internal function to calculate split hand payout
-    function _calculateSplitHandPayout(Game storage game) internal view returns (uint256) {
-        uint8 splitScore = CardLib.calculateHandValue(game.splitHand);
-        bool splitBusted = splitScore > BLACKJACK;
-
-        return _determineHandPayout(
-            splitScore,
-            game.scores.dealerScore,
-            game.splitBetAmount,
-            splitBusted,
-            game.dealerBusted,
-            false
         );
     }
 
@@ -596,21 +416,22 @@ contract Blackjack {
             return 0;
         }
 
-        if (isBlackjack && !dealerBusted && dealerScore != BLACKJACK) {
+        if (isBlackjack && dealerScore != BLACKJACK) {
             // Blackjack pays 3:2
-            return (betAmount * BLACKJACK_MULTIPLIER) / MULTIPLIER_BASE;
+            return (betAmount * BLACKJACK_MULTIPLIER) / MULTIPLIER_BASE; // winnings = betAmount * 1.5
         }
 
-        if (dealerBusted || (!playerBusted && playerScore > dealerScore)) {
+        if (dealerBusted || playerScore > dealerScore) {
             // Regular win pays 1:1
-            return betAmount * 2;
+            return betAmount; // winnings = betAmount
         }
 
-        if (!playerBusted && playerScore == dealerScore) {
-            // Push - return original bet
-            return betAmount;
+        if (playerScore == dealerScore) {
+            // Push - no winnings
+            return 0;
         }
 
+        // Player loses
         return 0;
     }
 
@@ -644,15 +465,6 @@ contract Blackjack {
      */
     function getDealerHand(uint256 gameId) external view returns (CardLib.Card[] memory) {
         return games[gameId].dealerHand;
-    }
-
-    /**
-     * @dev Returns the split hand for a specific game, if any.
-     * @param gameId The ID of the game.
-     * @return An array of Card structs representing the split hand.
-     */
-    function getSplitHand(uint256 gameId) external view returns (CardLib.Card[] memory) {
-        return games[gameId].splitHand;
     }
 
     // Helper function to generate commit for randomness
@@ -702,10 +514,7 @@ contract Blackjack {
             uint8 dealerScore,
             bool isPlayerTurn,
             bool isComplete,
-            uint256 betAmount,
-            bool canSplit,
-            bool canDouble,
-            bool isSplit
+            uint256 betAmount
         )
     {
         Game storage game = games[gameId];
@@ -715,30 +524,7 @@ contract Blackjack {
             game.scores.dealerScore,
             game.state == GameState.PlayerTurn,
             game.state == GameState.Complete,
-            game.betAmount,
-            _canSplitHand(game),
-            _canDoubleDown(game),
-            game.actionState == ActionState.Split
+            game.betAmount
         );
     }
-
-    // Internal helper to check if hand can be split
-    function _canSplitHand(Game storage game) internal view returns (bool) {
-        if (game.playerHand.length != 2 || game.actionState != ActionState.None) {
-            return false;
-        }
-
-        uint8 card1Value = CardLib.getCardValue(game.playerHand[0]);
-        uint8 card2Value = CardLib.getCardValue(game.playerHand[1]);
-
-        return card1Value == card2Value;
-    }
-
-    // Internal helper to check if hand can be doubled down
-    function _canDoubleDown(Game storage game) internal view returns (bool) {
-        return game.playerHand.length == 2 &&
-            game.actionState == ActionState.None &&
-            game.state == GameState.PlayerTurn;
-    }
 }
-

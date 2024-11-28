@@ -11,7 +11,7 @@ const CoinFlipPage = () => {
   const [showModal, setShowModal] = useState(false);
   const [newLobby, setNewLobby] = useState({ betAmount: "", choice: "" });
 
-  const contractAddress = "0x44D516c90bf5982433CD3f98A2868bEd72891602";
+  const contractAddress = "CONTRACT_ADDRESS_HERE";
 
   useEffect(() => {
     const initWeb3 = async () => {
@@ -101,7 +101,7 @@ const CoinFlipPage = () => {
       <div className="lobby-list">
         {lobbies.map((lobby, index) => (
           <div key={index} className="lobby-item">
-            <p><strong>Host:</strong> {lobby.host}</p>
+            <p><strong>Host:</strong> {lobby.dealer}</p>
             <p><strong>Bet Amount:</strong> {web3.utils.fromWei(lobby.betAmount, "ether")} ETH</p>
             <p><strong>Pick:</strong> {lobby.choice}</p>
             <p><strong>Status:</strong> {lobby.status}</p>

@@ -17,29 +17,37 @@ const BlackjackLobby = ({
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [betAmount, setBetAmount] = useState("");
   const [cancellingLobbyId, setCancellingLobbyId] = useState(null);
+  const [error, setError] = useState(null);
   
   // Filter lobbies to find all hosted by current account
   const myHostedLobbies = lobbies.filter(lobby => 
-    lobby.host.toLowerCase() === account.toLowerCase()
+    lobby.dealer.toLowerCase() === account.toLowerCase()
   );
+
+  // Error handling
+  if (error) {
+    console.error("Error:", error);
+    alert('Error: ' + error);
+  }
 
   const handleCreateLobby = async () => {
     try {
-      if (!betAmount || !web3) return;
+      if (!betAmount || !web3) {
+        setError("Please enter a valid bet amount.");
+        return;
+      }
       
-      // Convert bet amount to wei
-      const betAmountWei = web3.utils.toWei(betAmount, 'ether');
+      // Optional: Validate betAmount format
+      if (isNaN(betAmount) || Number(betAmount) <= 0) {
+        setError("Bet amount must be a positive number.");
+        return;
+      }
       
-      // Dealer needs to stake 1.5x the bet amount
-      const requiredStake = (window.BigInt(betAmountWei) * 3n) / 2n;
+      console.log("Creating lobby with betAmount:", betAmount);
       
-      console.log("Creating lobby with:", {
-        betAmount: betAmount,
-        betAmountWei: betAmountWei.toString(),
-        requiredStake: requiredStake.toString()
-      });
+      // Call onCreateLobby with betAmount
+      await onCreateLobby(betAmount);
       
-      await onCreateLobby(requiredStake.toString());
       setShowCreateModal(false);
       setBetAmount("");
       
@@ -53,7 +61,7 @@ const BlackjackLobby = ({
     try {
       if (!web3) return;
       
-      // The bet amount in the lobby is already adjusted (2/3 of what host sent)
+      // The bet amount in the lobby is already adjusted (2/3 of what dealer sent)
       const betAmountWei = lobby.betAmount;
       
       console.log("Joining lobby with:", {
@@ -181,9 +189,9 @@ const BlackjackLobby = ({
               >
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-gray-600">Host:</span>
-                    <span className="text-gray-900 font-medium truncate" title={lobby.host}>
-                      {lobby.host.slice(0, 6)}...{lobby.host.slice(-4)}
+                    <span className="text-gray-600">Dealer:</span>
+                    <span className="text-gray-900 font-medium truncate" title={lobby.dealer}>
+                      {lobby.dealer.slice(0, 6)}...{lobby.dealer.slice(-4)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
@@ -194,12 +202,12 @@ const BlackjackLobby = ({
                   </div>
                   <button
                     onClick={() => handleJoinLobby(lobby)}
-                    disabled={loading || lobby.host.toLowerCase() === account.toLowerCase()}
+                    disabled={loading || lobby.dealer.toLowerCase() === account.toLowerCase()}
                     className="mt-2 w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 
                              text-white font-medium py-2 px-4 rounded transition-colors 
                              duration-200 ease-in-out shadow-sm"
                   >
-                    {lobby.host.toLowerCase() === account.toLowerCase() 
+                    {lobby.dealer.toLowerCase() === account.toLowerCase() 
                       ? "Your Lobby" 
                       : "Join Game"}
                   </button>

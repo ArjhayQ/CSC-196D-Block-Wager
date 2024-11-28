@@ -5,17 +5,12 @@ import { Card } from './Card';
 const BlackjackGame = ({
   dealerCards,
   playerCards,
-  splitCards,
   dealerScore,
   playerScore,
-  canDouble,
-  canSplit,
   isPlayerTurn,
   loading,
   hit,
   stand,
-  doubleDown,
-  split,
   dealerHit,
   dealerStand,
   account,
@@ -23,7 +18,8 @@ const BlackjackGame = ({
   dealerAddress,
   gameResult,
   gameComplete,
-  onReturnToLobby
+  onReturnToLobby,
+  events
 }) => {
   const normalizedAccount = account?.toLowerCase();
   const normalizedDealerAddress = dealerAddress?.toLowerCase();
@@ -46,6 +42,23 @@ const BlackjackGame = ({
     if (isPlayer) return true; // Player always sees their own cards
     return false; // Dealer and spectators can't see player's cards during the game
   };
+
+  const renderEvents = () => (
+    <div className="events-section mt-6">
+      <h3 className="text-xl font-bold mb-2">Game Events</h3>
+      {events.length === 0 ? (
+        <p>No events yet.</p>
+      ) : (
+        <ul className="event-list max-h-60 overflow-y-auto">
+          {events.map((event, index) => (
+            <li key={index} className="event-item mb-1">
+              <span className="font-medium">{event.type}:</span> {event.action} <span className="text-gray-500 text-sm">({event.timestamp.toLocaleTimeString()})</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 
   const renderCard = (card, index, isHidden = false) => {
     if (isHidden) {
@@ -84,14 +97,6 @@ const BlackjackGame = ({
   const renderPlayerHand = () => (
     <div className="flex gap-2 flex-wrap">
       {playerCards.map((card, index) => 
-        renderCard(card, index, !isPlayerCardVisible(index))
-      )}
-    </div>
-  );
-
-  const renderSplitHand = () => (
-    <div className="flex gap-2 flex-wrap">
-      {splitCards.map((card, index) => 
         renderCard(card, index, !isPlayerCardVisible(index))
       )}
     </div>
@@ -221,13 +226,6 @@ const BlackjackGame = ({
           <p className="text-lg">Score: {playerScore}</p>
         )}
 
-        {splitCards.length > 0 && (
-          <div className="mt-4">
-            <h3 className="text-xl font-bold">Split Hand</h3>
-            {renderSplitHand()}
-          </div>
-        )}
-
         {isPlayerTurn && isPlayer && (
           <div className="flex gap-2 flex-wrap">
             <button 
@@ -244,29 +242,13 @@ const BlackjackGame = ({
             >
               Stand
             </button>
-            {canDouble && (
-              <button 
-                onClick={doubleDown} 
-                disabled={loading}
-                className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50"
-              >
-                Double Down
-              </button>
-            )}
-            {canSplit && (
-              <button 
-                onClick={split} 
-                disabled={loading}
-                className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:opacity-50"
-              >
-                Split
-              </button>
-            )}
           </div>
         )}
       </div>
 
       {renderGameStatus()}
+
+      {renderEvents()}
 
       {/* Loading Overlay */}
       {loading && (

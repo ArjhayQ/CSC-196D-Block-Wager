@@ -21,15 +21,15 @@ const BlackjackPage = () => {
   const [error, setError] = useState(null);
   const [playerCards, setPlayerCards] = useState([]);
   const [dealerCards, setDealerCards] = useState([]);
-  const [splitCards, setSplitCards] = useState([]);
   const [playerAddress, setPlayerAddress] = useState(null);
   const [dealerAddress, setDealerAddress] = useState(null);
   const [gameResult, setGameResult] = useState(null);
   const [gameComplete, setGameComplete] = useState(false); 
 
-  const contractAddress = "0x362098dF189233ca464b8B578fd6e653F8bB1CD3";
+  const contractAddress = "CONTRACT_ADDRESS_HERE";
   const listenersInitialized = useRef(false);
   const [processedEvents] = useState(new Set());
+  const [events, setEvents] = useState([]);
 
 
   const updateGameState = useCallback(async (gameId) => {
@@ -44,10 +44,7 @@ const BlackjackPage = () => {
         playerScore: Number(fullGameState.playerScore) || 0,
         dealerScore: Number(fullGameState.dealerScore) || 0,
         isPlayerTurn: Boolean(fullGameState.isPlayerTurn),
-        betAmount: fullGameState.betAmount,
-        canSplit: Boolean(fullGameState.canSplit),
-        canDouble: Boolean(fullGameState.canDouble),
-        isSplit: Boolean(fullGameState.isSplit)
+        betAmount: fullGameState.betAmount
       };
       
       console.log("Processed game state:", gameState);
@@ -137,36 +134,32 @@ const BlackjackPage = () => {
   // Setup contract event listeners with proper cleanup
   useEffect(() => {
     if (!contract || listenersInitialized.current) return;
-  
-    // Create a map to store our subscriptions
+
     const subscriptions = new Map();
-  
+
     const setupEventSubscription = (eventName, handler) => {
-      // If we already have this subscription, clean it up first
       if (subscriptions.has(eventName)) {
         const existingSub = subscriptions.get(eventName);
         if (existingSub && typeof existingSub.unsubscribe === 'function') {
           existingSub.unsubscribe();
         }
       }
-  
+
       console.log(`Setting up subscription for event: ${eventName}`);
       try {
         if (!contract.events[eventName]) {
           console.error(`Event ${eventName} not found in contract`);
           return null;
         }
-  
+
         const subscription = contract.events[eventName]({
-          fromBlock: 'latest' // Only listen to new events
+          fromBlock: 'latest'
         });
-  
+
         subscription.on('data', (event) => {
           console.log(`Event received: ${eventName}`, event);
-          // Create unique event identifier
           const eventId = `${event.blockHash}-${event.logIndex}-${eventName}`;
           
-          // Only process if we haven't seen this exact event before
           if (!processedEvents.has(eventId)) {
             processedEvents.add(eventId);
             try {
@@ -178,19 +171,16 @@ const BlackjackPage = () => {
             console.log(`Skipping duplicate event: ${eventId}`);
           }
         });
-  
+
         subscription.on('error', (error) => {
           console.error(`Error in ${eventName} subscription:`, error);
-          // Remove the errored subscription from our map
           subscriptions.delete(eventName);
-          // Attempt to resubscribe after a delay
           setTimeout(() => {
             const newSub = setupEventSubscription(eventName, handler);
             if (newSub) subscriptions.set(eventName, newSub);
           }, 5000);
         });
-  
-        // Store the subscription
+
         subscriptions.set(eventName, subscription);
         return subscription;
       } catch (error) {
@@ -198,8 +188,8 @@ const BlackjackPage = () => {
         return null;
       }
     };
-  
-    // Set up all event subscriptions
+
+    // Handle 'GameCreated' event
     setupEventSubscription('GameCreated', async (event) => {
       const gameId = event.returnValues.gameId;
       const player = event.returnValues.player;
@@ -207,25 +197,25 @@ const BlackjackPage = () => {
       console.log(`GameCreated event received for gameId: ${gameId}`);
       setGameComplete(false);
       setGameResult(null);
+      setEvents([]); // Reset events for new game
       updateGameState(gameId.toString());
       setPlayerAddress(player.toString());
       setDealerAddress(dealer.toString());
       setActiveGame(gameId.toString());
     });
-  
+
+    // Handle 'CardDealt' event
     setupEventSubscription('CardDealt', (event) => {
       console.log(`CardDealt event:`, event);
       const { value, suit, isDealer } = event.returnValues;
       const newCard = {
         value: Number(value),
         suit: Number(suit),
-        // Add unique identifier for the card
         eventId: `${event.blockHash}-${event.logIndex}`
       };
     
       if (isDealer === true || isDealer === 'true') {
         setDealerCards(prev => {
-          // Check for duplicate using eventId
           const isDuplicate = prev.some(card => card.eventId === newCard.eventId);
           return isDuplicate ? prev : [...prev, newCard];
         });
@@ -238,55 +228,57 @@ const BlackjackPage = () => {
       updateGameState(event.returnValues.gameId.toString());
     });
 
-    const playerActionSub = setupEventSubscription('PlayerAction', (event) => {
-    console.log(`PlayerAction event:`, event);
-    // Handle specific actions if necessary
-    updateGameState(event.returnValues.gameId.toString());
+    setupEventSubscription('PlayerAction', (event) => {
+      console.log(`PlayerAction event:`, event);
+      const action = event.returnValues.action || 'Performed an action';
+      const timestamp = new Date();
+      setEvents(prevEvents => [...prevEvents, { type: 'Player', action, timestamp }]);
+      updateGameState(event.returnValues.gameId.toString());
+    });
+
+    setupEventSubscription('DealerAction', (event) => {
+      console.log(`DealerAction event:`, event);
+      const action = event.returnValues.action || 'Performed an action';
+      const timestamp = new Date();
+      setEvents(prevEvents => [...prevEvents, { type: 'Dealer', action, timestamp }]);
+      updateGameState(event.returnValues.gameId.toString());
+    });
+
+    setupEventSubscription('GameComplete', (event) => {
+      console.log(`GameComplete event:`, event);
+      setGameResult({
+        result: event.returnValues.result.toString(),
+        playerPayout: web3.utils.fromWei(event.returnValues.playerPayout, 'ether'),
+        dealerPayout: web3.utils.fromWei(event.returnValues.dealerPayout, 'ether'),
+        playerScore: event.returnValues.playerScore.toString(),
+        dealerScore: event.returnValues.dealerScore.toString()
+      });
+      setEvents(prevEvents => [...prevEvents, { type: 'Game', action: 'Game Complete', timestamp: new Date() }]);
+      setGameComplete(true);
+    });
+
+  setupEventSubscription('PlayerTurn', (event) => {
+      console.log(`PlayerTurn event:`, event);
+      setGameState(prevState => ({
+        ...prevState,
+        isPlayerTurn: true
+      }));
+      setEvents(prevEvents => [...prevEvents, { type: 'Player', action: 'Player Turn', timestamp: new Date() }]);
   });
 
-  const dealerActionSub = setupEventSubscription('DealerAction', (event) => {
-    console.log(`DealerAction event:`, event);
-    updateGameState(event.returnValues.gameId.toString());
-  });
-
-const gameCompleteSub = setupEventSubscription('GameComplete', (event) => {
-  console.log(`GameComplete event:`, event);
-  setGameResult({
-    result: event.returnValues.result,
-    playerPayout: web3.utils.fromWei(event.returnValues.playerPayout, 'ether'),
-    dealerPayout: web3.utils.fromWei(event.returnValues.dealerPayout, 'ether'),
-    playerScore: event.returnValues.playerScore.toString(),
-    dealerScore: event.returnValues.dealerScore.toString()
-  });
-  setGameComplete(true);
-});
-
-const playerTurnSub = setupEventSubscription('PlayerTurn', (event) => {
-    console.log(`PlayerTurn event:`, event);
-    setGameState(prevState => ({
-      ...prevState,
-      isPlayerTurn: true
-    }));
-  });
-
-  const dealerTurnSub = setupEventSubscription('DealerTurn', (event) => {
+  setupEventSubscription('DealerTurn', (event) => {
     console.log(`DealerTurn event:`, event);
     setGameState(prevState => ({
       ...prevState,
       isPlayerTurn: false
     }));
+    setEvents(prevEvents => [...prevEvents, { type: 'Dealer', action: 'Dealer Turn', timestamp: new Date() }]);
   });
 
-  const splitHandStartedSub = setupEventSubscription('SplitHandStarted', (event) => {
-    console.log(`SplitHandStarted event:`, event);
-    setSplitCards([]);
-    updateGameState(event.returnValues.gameId.toString());
-  });
-
-  const handBustedSub = setupEventSubscription('HandBusted', (event) => {
+  setupEventSubscription('HandBusted', (event) => {
     console.log(`HandBusted event:`, event);
-    // Optionally handle UI updates
     updateGameState(event.returnValues.gameId.toString());
+    setEvents(prevEvents => [...prevEvents, { type: 'Game', action: 'Player Busted', timestamp: new Date() }]);
   });
 
   return () => {
@@ -312,7 +304,7 @@ const playerTurnSub = setupEventSubscription('PlayerTurn', (event) => {
 
         const processedLobbies = openLobbies.map((lobby) => ({
             id: lobby.lobbyId.toString(),
-            host: lobby.host,
+            dealer: lobby.dealer.toString(),
             betAmount: lobby.betAmount.toString(),
             gameId: lobby.gameId.toString(),
             status: lobby.status.toString(),
@@ -338,32 +330,44 @@ const playerTurnSub = setupEventSubscription('PlayerTurn', (event) => {
     }
   }, [contract, fetchLobbies]);
 
-  const createLobby = async (requiredStake) => {
-    if (!requiredStake) {
-      setError("Missing required stake");
+  const createLobby = async (betAmount) => {
+    if (!betAmount) {
+      setError("Missing bet amount");
       return;
     }
-
+  
     setLoading(true);
     setError(null);
     try {
-      console.log(`Creating lobby with requiredStake: ${requiredStake}`);
-      const tx = contract.methods.createLobby();
+      // Convert betAmount from Ether to Wei
+      const betAmountWei = web3.utils.toWei(betAmount, 'ether');
+      
+      // Calculate requiredStake as 1.5x betAmount
+      const requiredStake = (window.BigInt(betAmountWei) * 3n) / 2n; // Using BigInt for precise calculation
+      
+      console.log(`Creating lobby with betAmount: ${betAmount} ETH (${betAmountWei} Wei) and requiredStake: ${requiredStake} Wei`);
+      
+      // Call createLobby with betAmountWei as parameter
+      const tx = contract.methods.createLobby(betAmountWei);
+      
+      // Estimate gas with betAmount and requiredStake
       const gasEstimate = await tx.estimateGas({
         from: account,
-        value: requiredStake
+        value: requiredStake.toString()
       });
       console.log(`Estimated gas for createLobby: ${gasEstimate}`);
-
+  
+      // Add a buffer to gas estimate
       const gas = Math.ceil(Number(gasEstimate) * 1.2).toString();
       console.log(`Sending transaction with gas limit: ${gas}`);
-
+  
+      // Send transaction with betAmount and requiredStake
       await tx.send({ 
         from: account, 
-        value: requiredStake,
+        value: requiredStake.toString(),
         gas: gas
       });
-
+  
       console.log("Lobby created successfully");
       setShowCreateModal(false);
       setBetAmount("");
@@ -375,14 +379,13 @@ const playerTurnSub = setupEventSubscription('PlayerTurn', (event) => {
       setLoading(false);
     }
   };
-
+  
   const joinLobby = async (lobbyId, betAmount) => {
     setLoading(true);
     setError(null);
     // Empty card arrays
     setPlayerCards([]);
     setDealerCards([]);
-    setSplitCards([]);    
     setGameComplete(false);
     setGameResult(null);
     try {
@@ -409,7 +412,7 @@ const playerTurnSub = setupEventSubscription('PlayerTurn', (event) => {
       // Get and log the lobby details
       const lobby = await contract.methods.lobbies(lobbyId).call();
       console.log("Lobby details:", {
-        host: lobby.host,
+        dealer: lobby.dealer,
         betAmount: lobby.betAmount,
         status: lobby.status,
         gameId: lobby.gameId,
@@ -510,20 +513,6 @@ const playerTurnSub = setupEventSubscription('PlayerTurn', (event) => {
     gameAction('stand');
   };
 
-  const doubleDown = () => {
-    if (!gameState) return;
-    const value = web3.utils.toWei((Number(gameState.betAmount) * 2).toString(), "ether");
-    console.log("Double Down action triggered with value:", value);
-    gameAction('doubleDown', { value });
-  };
-
-  const split = () => {
-    if (!gameState) return;
-    const value = web3.utils.toWei((gameState.betAmount / 2).toString(), "ether");
-    console.log("Split action triggered with value:", value);
-    gameAction('split', { value });
-  };
-
   const dealerGameAction = async (action) => {
     if (!activeGame) {
       console.warn("No active game to perform dealer actions on.");
@@ -579,7 +568,6 @@ const playerTurnSub = setupEventSubscription('PlayerTurn', (event) => {
     setActiveGame(null);
     setPlayerCards([]);
     setDealerCards([]);
-    setSplitCards([]);
     setGameState(null);
     setGameResult(null);
     setGameComplete(false);
@@ -607,17 +595,12 @@ const playerTurnSub = setupEventSubscription('PlayerTurn', (event) => {
       <BlackjackGame 
         dealerCards={dealerCards}
         playerCards={playerCards}
-        splitCards={splitCards}
         dealerScore={gameState?.dealerScore}
         playerScore={gameState?.playerScore}
-        canDouble={gameState?.canDouble}
-        canSplit={gameState?.canSplit}
         isPlayerTurn={gameState?.isPlayerTurn}
         loading={loading}
         hit={hit}
         stand={stand}
-        doubleDown={doubleDown}
-        split={split}
         dealerHit={dealerHit}
         dealerStand={dealerStand}
         account={account}
@@ -626,6 +609,7 @@ const playerTurnSub = setupEventSubscription('PlayerTurn', (event) => {
         gameResult={gameResult}
         gameComplete={gameComplete}
         onReturnToLobby={returnToLobby}
+        events={events}
       />
       )}
     </div>
