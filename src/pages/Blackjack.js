@@ -27,7 +27,7 @@ const BlackjackPage = () => {
   const [gameResult, setGameResult] = useState(null);
   const [gameComplete, setGameComplete] = useState(false); 
 
-  const contractAddress = "0x9805e799E9902a9EC4073C89c09e247D0A41D5E3";
+  const contractAddress = "0x362098dF189233ca464b8B578fd6e653F8bB1CD3";
   const listenersInitialized = useRef(false);
   const [processedEvents] = useState(new Set());
 
@@ -205,12 +205,12 @@ const BlackjackPage = () => {
       const player = event.returnValues.player;
       const dealer = event.returnValues.dealer;
       console.log(`GameCreated event received for gameId: ${gameId}`);
-      setActiveGame(gameId);
-      setPlayerAddress(player);
-      setDealerAddress(dealer);
       setGameComplete(false);
       setGameResult(null);
-      updateGameState(gameId);
+      updateGameState(gameId.toString());
+      setPlayerAddress(player.toString());
+      setDealerAddress(dealer.toString());
+      setActiveGame(gameId.toString());
     });
   
     setupEventSubscription('CardDealt', (event) => {
@@ -439,8 +439,12 @@ const playerTurnSub = setupEventSubscription('PlayerTurn', (event) => {
       });
 
       console.log("Joined lobby successfully");
+      // Update active game and force transition
+      setActiveGame(lobby.gameId.toString());
+      setPlayerAddress(account); // Assuming the current account is the player
+      setDealerAddress(lobby.dealer); // Update dealer address
       fetchLobbies(); // Refresh lobbies after joining
-  
+      fetchLobbies(); // Refresh lobbies after joining
     } catch (error) {
       console.error("Error joining lobby:", error);
       setError(handleTransactionError(error));
