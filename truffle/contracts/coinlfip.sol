@@ -3,7 +3,7 @@ pragma solidity ^0.8.21;
 
 contract CoinFlip {
     struct Lobby {
-        address payable host; // Mark host as payable
+        address payable dealer; // Mark dealer as payable
         uint256 betAmount;
         string choice; // "Heads" or "Tails"
         address payable joinedUser; // Mark joinedUser as payable
@@ -14,7 +14,7 @@ contract CoinFlip {
     mapping(uint256 => Lobby) public lobbies;
     uint256 public lobbyCounter;
 
-    event LobbyCreated(uint256 lobbyId, address host, uint256 betAmount, string choice);
+    event LobbyCreated(uint256 lobbyId, address dealer, uint256 betAmount, string choice);
     event LobbyJoined(uint256 lobbyId, address joinedUser);
     event CoinFlipped(uint256 lobbyId, string result);
 
@@ -27,7 +27,7 @@ contract CoinFlip {
         require(msg.value > 0, "Bet amount must be greater than 0");
 
         lobbies[lobbyCounter] = Lobby({
-            host: payable(msg.sender), // Explicitly cast msg.sender to payable
+            dealer: payable(msg.sender), // Explicitly cast msg.sender to payable
             betAmount: msg.value,
             choice: choice,
             joinedUser: payable(address(0)), // Explicitly cast address(0) to payable
@@ -46,7 +46,7 @@ contract CoinFlip {
             "Lobby is not available"
         );
         require(lobby.joinedUser == payable(address(0)), "Lobby already joined"); // Explicitly cast address(0) to payable
-        require(lobby.host != msg.sender, "Host cannot join their own lobby");
+        require(lobby.dealer != msg.sender, "Host cannot join their own lobby");
         require(msg.value == lobby.betAmount, "Incorrect bet amount");
 
         lobby.joinedUser = payable(msg.sender); // Explicitly cast msg.sender to payable
@@ -82,7 +82,7 @@ contract CoinFlip {
         // Determine winner and transfer funds
         if (keccak256(abi.encodePacked(result)) == keccak256(abi.encodePacked(lobby.choice))) {
             // Host wins
-            lobby.host.transfer(lobby.betAmount * 2);
+            lobby.dealer.transfer(lobby.betAmount * 2);
         } else {
             // Joined user wins
             lobby.joinedUser.transfer(lobby.betAmount * 2);

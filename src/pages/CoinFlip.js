@@ -153,9 +153,14 @@ const CoinFlipPage = () => {
                 Tails
               </label>
             </div>
-            <button onClick={createLobby} className="modal-create-button">
-              Create
-            </button>
+            <div className = "input-group">
+              <button onClick={createLobby} className="modal-create-button">
+                Create
+              </button>
+              <button className = "modal-close-button"onClick={() => {setShowModal(false); setNewLobby({ betAmount: "", choice: "" }); } }>
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
