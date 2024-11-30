@@ -105,7 +105,7 @@ const BlackjackLobby = ({
 
   return (
     <div className="w-full max-w-6xl mx-auto p-4 bg-gray-100">
-      <h1 className="text-3xl font-bold text-gray-800 mb-8">Blackjack Lobby</h1>
+      <h1 className="text-3xl font-bold text-gray-800 mb-8">Blackjack Lobbies</h1>
       
       {myHostedLobbies.length > 0 ? (
         <div className="mb-8 space-y-4">

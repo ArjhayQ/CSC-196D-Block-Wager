@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import Web3 from "web3";
 import CoinFlipABI from "../abis/CoinFlip.json";
-import "../styles/CoinFlip.css";
 
 const CoinFlipPage = () => {
   const [web3, setWeb3] = useState(null);
@@ -39,10 +38,11 @@ const CoinFlipPage = () => {
 
         for (let i = 0; i < lobbyCounter; i++) {
           const lobby = await contract.methods.lobbies(i).call();
-          fetchedLobbies.push(lobby);
+          if (lobby.status !== "Closed") {
+            fetchedLobbies.push(lobby);
+          }
         }
 
-        console.log("Fetched Lobbies:", fetchedLobbies);
         setLobbies(fetchedLobbies);
       } catch (error) {
         console.error("Error fetching lobbies:", error);
@@ -65,11 +65,10 @@ const CoinFlipPage = () => {
     }
 
     try {
-      const tx = await contract.methods
+      await contract.methods
         .createLobby(newLobby.choice)
         .send({ from: account, value: web3.utils.toWei(newLobby.betAmount, "ether") });
 
-      console.log("Transaction Receipt:", tx);
       fetchLobbies();
       setShowModal(false);
       setNewLobby({ betAmount: "", choice: "" });
@@ -91,73 +90,109 @@ const CoinFlipPage = () => {
   };
 
   return (
-    <div className="coinflip-page">
-      <h1>Coin Flip Lobbies</h1>
-      <div className="sub-header">
-        <button className="create-button" onClick={() => setShowModal(true)}>
-          Create Lobby
-        </button>
-      </div>
-      <div className="lobby-list">
-        {lobbies.map((lobby, index) => (
-          <div key={index} className="lobby-item">
-            <p><strong>Host:</strong> {lobby.dealer}</p>
-            <p><strong>Bet Amount:</strong> {web3.utils.fromWei(lobby.betAmount, "ether")} ETH</p>
-            <p><strong>Pick:</strong> {lobby.choice}</p>
-            <p><strong>Status:</strong> {lobby.status}</p>
-
-            {lobby.status === "Open" && (
-              <button className="join-button" onClick={() => joinLobby(index)}>
-                Join
-              </button>
-            )}
-
-            {lobby.status === "Flipping" && (
-              <p className="flipping-text">Flipping in progress...</p>
-            )}
-
-            {lobby.status === "Ended" && (
-              <p className="result-text">Result: {lobby.result}</p>
-            )}
+    <div className="w-full max-w-6xl mx-auto p-4 bg-gray-100">
+      <h1 className="text-3xl font-bold text-gray-800 mb-8">Coin Flip Lobbies</h1>
+      
+      <button
+        onClick={() => setShowModal(true)}
+        className="w-full mb-8 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 
+                   text-white font-bold py-4 px-6 rounded-lg transition-colors 
+                   duration-200 ease-in-out flex items-center justify-center gap-2 shadow-md"
+      >
+        Create Lobby
+      </button>
+      
+      <div className="space-y-4 bg-white rounded-lg p-6 shadow-md">
+        <h2 className="text-xl font-bold text-gray-800 mb-6">Open Games</h2>
+        {lobbies.length === 0 ? (
+          <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
+            <p className="text-gray-600">No open games available</p>
           </div>
-        ))}
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {lobbies.map((lobby, index) => (
+              <div
+                key={index}
+                className="bg-gray-50 rounded-lg shadow-sm p-4 border border-gray-200"
+              >
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Host:</span>
+                    <span className="text-gray-900 font-medium truncate" title={lobby.dealer}>
+                      {lobby.dealer.slice(0, 6)}...{lobby.dealer.slice(-4)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Bet Amount:</span>
+                    <span className="text-gray-900 font-medium">
+                      {web3?.utils.fromWei(lobby.betAmount, "ether")} ETH
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Pick:</span>
+                    <span className="text-gray-900 font-medium">{lobby.choice}</span>
+                  </div>
+                  <button
+                    onClick={() => joinLobby(index)}
+                    disabled={lobby.status !== "Open"}
+                    className="mt-2 w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 
+                             text-white font-medium py-2 px-4 rounded transition-colors 
+                             duration-200 ease-in-out shadow-sm"
+                  >
+                    {lobby.status === "Open" ? "Join Lobby" : "Lobby Closed"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {showModal && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <h2>Create Lobby</h2>
-            <label>Bet Amount (ETH):</label>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
+            <h2 className="text-2xl font-bold mb-4">Create New Game</h2>
+            <label className="block text-gray-700 mb-2">Bet Amount (ETH):</label>
             <input
               type="number"
               value={newLobby.betAmount}
               onChange={(e) => setNewLobby({ ...newLobby, betAmount: e.target.value })}
+              className="w-full mb-4 p-2 border rounded"
             />
-            <div>
-              <label>
+            <label className="block text-gray-700 mb-2">Choice:</label>
+            <div className="flex gap-4 mb-4">
+              <label className="flex items-center gap-2">
                 <input
                   type="radio"
                   name="choice"
                   value="Heads"
                   onChange={(e) => setNewLobby({ ...newLobby, choice: e.target.value })}
+                  className="form-radio"
                 />
                 Heads
               </label>
-              <label>
+              <label className="flex items-center gap-2">
                 <input
                   type="radio"
                   name="choice"
                   value="Tails"
                   onChange={(e) => setNewLobby({ ...newLobby, choice: e.target.value })}
+                  className="form-radio"
                 />
                 Tails
               </label>
             </div>
-            <div className = "input-group">
-              <button onClick={createLobby} className="modal-create-button">
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={createLobby}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded"
+              >
                 Create
               </button>
-              <button className = "modal-close-button"onClick={() => {setShowModal(false); setNewLobby({ betAmount: "", choice: "" }); } }>
+              <button
+                onClick={() => setShowModal(false)}
+                className="bg-gray-300 hover:bg-gray-400 text-gray-700 font-medium py-2 px-4 rounded"
+              >
                 Cancel
               </button>
             </div>
