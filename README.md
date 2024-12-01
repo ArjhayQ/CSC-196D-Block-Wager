@@ -1,3 +1,34 @@
+# Installing Dependencies to Run Block-Wager
+
+Install Metamask: https://metamask.io/download/
+
+In the project directory, open the Command Line and run the following commands:
+
+## npm install
+
+## npm install -g truffle
+
+## npm install -g ganache
+
+## cd truffle
+
+## truffle compile
+
+## truffle migrate --reset
+
+## Follow-Up Steps Below:
+
+### Copy contract address of CoinFlip from the migration output and paste it to src/Pages/CoinFlip.js @ line 14
+
+### Copy contract address of Blakckjack from the migration output and paste it to src/Pages/Blackjack.js @ line 30
+
+### Copy contract ABIs (truffle/build/contracts/Blackjack.json and truffle/build/contracts/CoinFlip.json) and paste it to src/abis/ (if prompted, make sure to replace/overwrite the existing ABIs)
+
+### npm run start
+
+### connect to Metamask local network by inputting the RPC URL, Chain ID, and ETH as the currency symbol, similar to how we did in Lab 1.
+
+
 # Getting Started with Create React App
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
